@@ -189,55 +189,82 @@ document.getElementById('orderType').addEventListener('change', async function (
   $('#adminLogout').onclick=async()=>{if(db)await db.auth.signOut();session=null;$('#adminContent').hidden=true;$('#adminLogin').hidden=false;$('#adminLogout').hidden=true;toast('Naka-log out na.');};
   async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();await loadOrders();fillSettingsForms();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
   
+
 async function loadOrders(){
   const el = $('#ordersList');
   el.innerHTML = '<p>Kinukuha ang orders...</p>';
-<option value="Pending" ${o.status==='Pending'?'selected':''}>Pending — Bagong order</option>
-<option value="Preparing" ${o.status==='Preparing'?'selected':''}>Cooking — Niluluto na</option>
-<option value="Ready" ${o.status==='Ready'?'selected':''}>Ready — Handa na</option>
-<option value="Completed" ${o.status==='Completed'?'selected':''}>Delivered — Na-deliver na</option>
-<option value="Cancelled" ${o.status==='Cancelled'?'selected':''}>Cancelled — Kinansela</option>
+
   try {
     if (!db) {
       el.innerHTML = '<p>Walang koneksyon sa Supabase.</p>';
       return;
     }
 
-    
-const { data, error } = await db
-  .from('orders')
-  .select('*');
+    const { data: orders, error } = await db
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-console.log('ORDERS DATA:', data);
-console.log('ORDERS ERROR:', error);
+    if (error) throw error;
 
-
-    if (error) {
-      el.innerHTML = '<p>Supabase error: ' + esc(error.message) + '</p>';
-      console.error('SIKAIN orders error:', error);
+    if (!orders || orders.length === 0) {
+      el.innerHTML = '<p>Wala pang orders.</p>';
       return;
     }
 
-    if (!data || data.length === 0) {
-      el.innerHTML = '<p>Walang orders na naibalik ng Supabase. Suriin ang permissions o RLS policy.</p>';
-      return;
-    }
-
-    el.innerHTML = data.map(o => `
+    el.innerHTML = orders.map(o => `
       <article class="order-card">
         <h3>${esc(o.order_code || 'Walang order number')}</h3>
         <p>${esc(o.customer_name || 'Customer')} · ${esc(o.phone || '')}</p>
         <p>${esc(o.order_type || '')} · ${esc(o.address || '')}</p>
-        <p>Status: ${esc(o.status || 'Pending')}</p>
         <p>Total: ${money(o.total)}</p>
+
+        <label>Status ng order:</label>
+        <select data-status-for="${esc(o.id)}">
+          <option value="Pending" ${o.status==='Pending'?'selected':''}>Pending — Bagong order</option>
+          <option value="Preparing" ${o.status==='Preparing'?'selected':''}>Cooking — Niluluto na</option>
+          <option value="Ready" ${o.status==='Ready'?'selected':''}>Ready — Handa na</option>
+          <option value="Completed" ${o.status==='Completed'?'selected':''}>Delivered — Na-deliver na</option>
+          <option value="Cancelled" ${o.status==='Cancelled'?'selected':''}>Cancelled — Kinansela</option>
+        </select>
+
+        <button class="outline-btn" data-update-order="${esc(o.id)}">
+          Update status
+        </button>
       </article>
     `).join('');
+
+    $$('[data-update-order]').forEach(button => {
+      button.onclick = async () => {
+        const id = button.dataset.updateOrder;
+        const select = $(`[data-status-for="${CSS.escape(id)}"]`);
+        const status = select.value;
+
+        button.disabled = true;
+        try {
+          const { error } = await db
+            .from('orders')
+            .update({ status })
+            .eq('id', id);
+
+          if (error) throw error;
+
+          toast('Na-update ang order status!');
+          await loadOrders();
+        } catch (err) {
+          toast('Hindi na-update: ' + err.message);
+        } finally {
+          button.disabled = false;
+        }
+      };
+    });
 
   } catch (err) {
     el.innerHTML = '<p>Hindi ma-load ang orders: ' + esc(err.message) + '</p>';
     console.error('SIKAIN loadOrders error:', err);
   }
 }
+
 
   $('#refreshOrders').onclick=loadOrders;
   function printReceipt(o){const lines=(o.items||[]).map(i=>`<tr><td>${esc(i.qty)}x ${esc(i.name)}</td><td style="text-align:right">${money(i.line_total??i.price*i.qty)}</td></tr>`).join('');const w=window.open('','_blank','width=360,height=650');if(!w){toast('Payagan ang pop-up para makapag-print.');return;}w.document.write(`<!doctype html><html><head><title>Receipt ${esc(o.order_code)}</title><style>body{font:12px monospace;width:280px;margin:8px auto;color:#000}h2,p{text-align:center;margin:5px 0}hr{border:0;border-top:1px dashed #000;margin:10px 0}table{width:100%;border-collapse:collapse}td{padding:4px 0;vertical-align:top}.total{font-size:15px;font-weight:bold}</style></head><body><h2>${esc(settings.store_name||'SIKAIN')}</h2><p>${esc(settings.slogan||'Lokal na Lasang Atin.')}</p><p>${esc(settings.store_address||'')}</p><hr><p>ORDER RECEIPT</p><p>${esc(o.order_code)}</p><p>${esc(o.created_at?new Date(o.created_at).toLocaleString('en-PH'):new Date().toLocaleString('en-PH'))}</p><hr><p style="text-align:left">Customer: ${esc(o.customer_name)}<br>Phone: ${esc(o.phone)}<br>Type: ${esc(o.order_type)}<br>Address: ${esc(o.address||'')}<br>Payment: ${esc(o.payment_method||'')}</p><hr><table>${lines}</table><hr><table><tr><td>Subtotal</td><td style="text-align:right">${money(o.subtotal)}</td></tr><tr><td>Delivery</td><td style="text-align:right">${money(o.delivery_fee)}</td></tr><tr class="total"><td>TOTAL</td><td style="text-align:right">${money(o.total)}</td></tr></table><hr><p>Salamat sa pag-order!</p><p>${esc(o.notes||'')}</p><script>window.onload=()=>{window.print();};<\/script></body></html>`);w.document.close();}
