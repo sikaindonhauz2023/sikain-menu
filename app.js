@@ -174,7 +174,15 @@ document.getElementById('orderType').addEventListener('change', async function (
 } catch (lookupError) {
   console.error('Order saved, but tracking failed:', lookupError);
 }
-    }catch(err){toast('Hindi na-submit ang order: '+(err.message||'May error.'));}finally{btn.disabled=false;btn.textContent='Place Order';}};
+    
+}catch(err){
+  console.error('SIKAIN Place Order error:', err);
+  toast('Order error: '+(err?.message || String(err) || 'Hindi alam ang sanhi.'));
+}finally{
+  btn.disabled=false;
+  btn.textContent='Place Order';
+}};
+
   async function lookupOrder(code){let order=null;if(db){const {data,error}=await db.rpc('track_sikain_order',{code_input:code});if(!error)order=data;}else order=(demoRead('orders')||[]).find(o=>o.order_code.toLowerCase()===code.toLowerCase());const el=$('#trackResult');el.innerHTML=order?`<div class="panel"><span class="status-pill">${esc(order.status)}</span><h2>Order ${esc(order.order_code)}</h2><p>${esc(order.customer_name||'Customer')} · ${esc(order.order_type||'')}</p><p>${Array.isArray(order.items)?order.items.map(i=>`${esc(i.qty)}× ${esc(i.name)}`).join('<br>'):''}</p><h3>Total: ${money(order.total)}</h3><p class="muted small">Order status: Pending → Preparing → Ready → Completed.</p></div>`:'<div class="panel">Hindi makita ang order. I-check ang order number at subukan ulit.</div>';}
   $('#trackForm').onsubmit=e=>{e.preventDefault();lookupOrder($('#trackCode').value.trim());};
   $('#adminLogin').onsubmit=async e=>{e.preventDefault();if(!db){$('#loginMessage').textContent='Demo mode: ikonekta muna ang Supabase at gumawa ng admin account. Walang secure admin login sa demo mode.';return;}const f=new FormData(e.currentTarget);const {data,error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error){$('#loginMessage').textContent=error.message;return;}session=data.session;await refreshAdmin();};
