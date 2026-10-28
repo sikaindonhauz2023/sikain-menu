@@ -188,7 +188,7 @@ document.getElementById('orderType').addEventListener('change', async function (
   $('#adminLogin').onsubmit=async e=>{e.preventDefault();if(!db){$('#loginMessage').textContent='Demo mode: ikonekta muna ang Supabase at gumawa ng admin account. Walang secure admin login sa demo mode.';return;}const f=new FormData(e.currentTarget);const {data,error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error){$('#loginMessage').textContent=error.message;return;}session=data.session;await refreshAdmin();};
   $('#adminLogout').onclick=async()=>{if(db)await db.auth.signOut();session=null;$('#adminContent').hidden=true;$('#adminLogin').hidden=false;$('#adminLogout').hidden=true;toast('Naka-log out na.');};
   async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();await loadOrders();fillSettingsForms();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
-  async function loadOrders(){let orders=[];if(db){
+  async function loadOrders(){let orders=[];$('#ordersList').innerHTML = '<p>Orders na nakuha: ' + orders.length + '</p>';if(db){
 const {data,error}=await db.from('orders').select('*').order('created_at',{ascending:false}).limit(100);
 console.log('SIKAIN admin orders:', data);
 if (error) console.error('SIKAIN orders error:', error);
