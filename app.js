@@ -101,8 +101,12 @@ async function setupDeliveryMap() {
   if (!mapElement) return;
 
   if (!deliveryMap) {
-    deliveryMap = L.map('deliveryMap').setView([14.517, 121.05], 14);
+    if (typeof L === 'undefined') {
+  alert('Hindi nag-load ang Leaflet map library. I-refresh ang website at subukan ulit.');
+  return;
+}
 
+deliveryMap = L.map('deliveryMap').setView([14.517, 121.05], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19
