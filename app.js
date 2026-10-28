@@ -189,15 +189,14 @@ document.getElementById('orderType').addEventListener('change', async function (
   $('#adminLogout').onclick=async()=>{if(db)await db.auth.signOut();session=null;$('#adminContent').hidden=true;$('#adminLogin').hidden=false;$('#adminLogout').hidden=true;toast('Naka-log out na.');};
   async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();await loadOrders();fillSettingsForms();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
   
-async function loadOrders()
+async function loadOrders(){
+  const el = $('#ordersList');
+  el.innerHTML = '<p>Kinukuha ang orders...</p>';
 <option value="Pending" ${o.status==='Pending'?'selected':''}>Pending — Bagong order</option>
 <option value="Preparing" ${o.status==='Preparing'?'selected':''}>Cooking — Niluluto na</option>
 <option value="Ready" ${o.status==='Ready'?'selected':''}>Ready — Handa na</option>
 <option value="Completed" ${o.status==='Completed'?'selected':''}>Delivered — Na-deliver na</option>
-<option value="Cancelled" ${o.status==='Cancelled'?'selected':''}>Cancelled — Kinansela</option> {
-  const el = $('#ordersList');
-  el.innerHTML = '<p>Kinukuha ang orders...</p>';
-
+<option value="Cancelled" ${o.status==='Cancelled'?'selected':''}>Cancelled — Kinansela</option>
   try {
     if (!db) {
       el.innerHTML = '<p>Walang koneksyon sa Supabase.</p>';
