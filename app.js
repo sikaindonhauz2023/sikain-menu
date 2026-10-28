@@ -93,6 +93,73 @@ async function getRoadDistance(address) {
   return result.routes[0].distance / 1000;
 }
 
+let deliveryMap = null;
+let deliveryMarker = null;
+
+async function setupDeliveryMap() {
+  const mapElement = document.getElementById('deliveryMap');
+  if (!mapElement) return;
+
+  if (!deliveryMap) {
+    deliveryMap = L.map('deliveryMap').setView([14.517, 121.05], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(deliveryMap);
+
+    deliveryMap.on('click', async function (event) {
+      const lat = event.latlng.lat;
+      const lon = event.latlng.lng;
+
+      if (deliveryMarker) {
+        deliveryMarker.setLatLng(event.latlng);
+      } else {
+        deliveryMarker = L.marker(event.latlng).addTo(deliveryMap);
+      }
+
+      const message = document.getElementById('distanceMessage');
+      message.textContent = 'Hinahanap ang address ng napiling lokasyon...';
+
+      try {
+        const url =
+          'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' +
+          lat + '&lon=' + lon;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Hindi makuha ang address.');
+
+        const result = await response.json();
+        if (!result.display_name) {
+          throw new Error('Walang address para sa lokasyong ito.');
+        }
+
+        document.getElementById('customerAddress').value =
+          result.display_name;
+
+        message.textContent =
+          'Napili na ang lokasyon. Pindutin ang Kalkulahin ang delivery fee.';
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+  }
+
+  deliveryMap.invalidateSize();
+}
+
+document.getElementById('orderType').addEventListener('change', async function () {
+  const fields = document.getElementById('deliveryFields');
+
+  if (this.value === 'delivery') {
+    fields.hidden = false;
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await setupDeliveryMap();
+  } else {
+    fields.hidden = true;
+  }
+});
+
   $('#checkDistance').onclick=async()=>{const address=$('#customerAddress').value.trim();if(!address){toast('Ilagay muna ang delivery address.');return;}$('#distanceMessage').textContent='Kinukuwenta ang road distance…';$('#checkDistance').disabled=true;try{distanceKm=await getRoadDistance(address);if(distanceKm>Number(settings.max_delivery_km||10)){deliveryFee=0;$('#distanceMessage').textContent=`${distanceKm.toFixed(1)} km ang layo. Lampas ito sa maximum na ${settings.max_delivery_km} km.`;toast('Lampas sa delivery coverage.');}else{deliveryFee=Number(settings.delivery_base_fee||0)+distanceKm*Number(settings.delivery_per_km||0);$('#distanceMessage').textContent=`Tinatayang ${distanceKm.toFixed(1)} km sa kalsada. Delivery fee: ${money(deliveryFee)}.`;}renderCart();}catch(e){$('#distanceMessage').textContent=e.message;toast(e.message);}finally{$('#checkDistance').disabled=false;}};
   function makeCode(){return 'SK-'+Math.random().toString(36).slice(2,8).toUpperCase();}
   $('#checkoutForm').onsubmit=async e=>{e.preventDefault();if(!cart.length){toast('Magdagdag muna ng pagkain sa cart.');return;}const f=new FormData(e.currentTarget);const orderType=f.get('order_type');const address=String(f.get('address')||'').trim();if(orderType==='delivery'&&!address){toast('Ilagay ang delivery address.');return;}if(orderType==='delivery'&&distanceKm===null){toast('Pindutin muna ang Kalkulahin ang delivery fee.');return;}if(orderType==='delivery'&&distanceKm>Number(settings.max_delivery_km||10)){toast('Lampas sa delivery coverage ang address.');return;}
