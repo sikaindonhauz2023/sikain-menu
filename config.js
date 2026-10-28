@@ -1,6 +1,6 @@
 /* Ilagay dito ang Supabase project URL at anon/public key mula sa Supabase dashboard.
    HUWAG ilagay ang service_role key o anumang secret key sa browser code. */
 window.SIKAIN_CONFIG = {
-  SUPABASE_URL: "https://supabase.com/dashboard/project/iyttwflmykhwysosowxn/settings/api-keys",
+  SUPABASE_URL: "https://iyttwflmykhwysosowxn.supabase.co",
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5dHR3ZmxteWtod3lzb3Nvd3huIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNDAxMTcsImV4cCI6MjEwODcxNjExN30.lWlIMYpk4kAZ9Kqc8vhYD9wUdF1ZQyq8mlcFCPIh7EE"
 };
