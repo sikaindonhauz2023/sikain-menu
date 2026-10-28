@@ -79,7 +79,24 @@
     $$('[data-delete-product]').forEach(b=>b.onclick=async()=>{if(!confirm('Sigurado bang buburahin ang menu item na ito?'))return;let error=null;if(db){({error}=await db.from('products').delete().eq('id',b.dataset.deleteProduct));}else{products=products.filter(p=>String(p.id)!==b.dataset.deleteProduct);demoWrite('products',products);}if(error)toast(error.message);else{toast('Na-delete ang menu item.');await loadProducts();}});
   }
   $('#newProduct').onclick=()=>{const f=$('#productForm');f.reset();f.hidden=false;f.elements.id.value='';f.elements.available.checked=true;$('#productFormTitle').textContent='Add food';f.scrollIntoView({behavior:'smooth'});};$('#cancelProduct').onclick=()=>$('#productForm').hidden=true;
-  async function uploadFile(file,folder){if(!file)return null;if(!db)throw new Error('Kailangan ng Supabase para sa image upload.');const path=`${folder}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`const {error}=await db.storage.from('food-photos').upload(path,file,{upsert:true,contentType:file.type});if(error)throw error;return db.storage.from('food-photos').getPublicUrl(path).data.publicUrl;}
+async function uploadFile(file, folder) {
+  if (!file) return null;
+  if (!db) throw new Error('Kailangan ng Supabase para sa image upload.');
+
+  const path = `${folder}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+  const { error } = await db.storage
+    .from('food-photos')
+    .upload(path, file, {
+      upsert: false,
+      contentType: file.type
+    });
+
+  if (error) throw error;
+
+  return db.storage.from('food-photos').getPublicUrl(path).data.publicUrl;
+}
+
   $('#productForm').onsubmit=async e=>{e.preventDefault();if(!db){toast('Demo mode lang: hindi pa permanent ang menu changes. Ikonekta ang Supabase para ma-save online.');return;}const f=e.currentTarget;const fd=new FormData(f);const id=String(fd.get('id')||'');let image_url=String(fd.get('image_url')||'').trim();try{if(f.elements.photo_file.files[0])image_url=await uploadFile(f.elements.photo_file.files[0],'foods');const payload={name:String(fd.get('name')).trim(),price:Number(fd.get('price')),category:String(fd.get('category')||'Others').trim()||'Others',image_url,description:String(fd.get('description')||''),available:f.elements.available.checked};let result;if(id)result=await db.from('products').update(payload).eq('id',id);else result=await db.from('products').insert(payload);if(result.error)throw result.error;f.hidden=true;f.reset();toast('Na-save ang menu item.');await loadProducts();}catch(err){toast('Hindi na-save: '+err.message);}};
   function fillSettingsForms(){const a=$('#appearanceForm'),d=$('#deliveryForm');for(const k of ['store_name','slogan','logo_url','theme_color','background_color','font_family','banner_url'])if(a.elements[k])a.elements[k].value=settings[k]??defaultSettings[k]??'';for(const k of ['store_address','facebook_url','maps_api_key','delivery_base_fee','delivery_per_km','max_delivery_km'])if(d.elements[k])d.elements[k].value=settings[k]??defaultSettings[k]??'';}
   async function saveSettings(values){if(db){for(const [key,value] of Object.entries(values)){const {error}=await db.from('store_settings').upsert({key,value},{onConflict:'key'});if(error)throw error;}}else{settings={...settings,...values};demoWrite('settings',settings);}settings={...settings,...values};applySettings();}
