@@ -199,11 +199,14 @@ async function loadOrders(){
       return;
     }
 
-    const { data, error } = await db
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100);
+    
+const { data, error } = await db
+  .from('orders')
+  .select('*');
+
+console.log('ORDERS DATA:', data);
+console.log('ORDERS ERROR:', error);
+
 
     if (error) {
       el.innerHTML = '<p>Supabase error: ' + esc(error.message) + '</p>';
