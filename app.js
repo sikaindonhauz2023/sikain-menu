@@ -190,6 +190,7 @@ document.getElementById('orderType').addEventListener('change', async function (
   async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();await loadOrders();fillSettingsForms();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
   
 
+
 async function loadOrders(){
   const el = $('#ordersList');
   el.innerHTML = '<p>Kinukuha ang orders...</p>';
@@ -221,15 +222,15 @@ async function loadOrders(){
 
         <label>Status ng order:</label>
         <select data-status-for="${esc(o.id)}">
-          <option value="Pending" ${o.status==='Pending'?'selected':''}>Pending — Bagong order</option>
-          <option value="Preparing" ${o.status==='Preparing'?'selected':''}>Cooking — Niluluto na</option>
-          <option value="Ready" ${o.status==='Ready'?'selected':''}>Ready — Handa na</option>
-          <option value="Completed" ${o.status==='Completed'?'selected':''}>Delivered — Na-deliver na</option>
-          <option value="Cancelled" ${o.status==='Cancelled'?'selected':''}>Cancelled — Kinansela</option>
+          <option value="Pending" ${o.status === 'Pending' ? 'selected' : ''}>Pending — Bagong order</option>
+          <option value="Preparing" ${o.status === 'Preparing' ? 'selected' : ''}>Cooking — Niluluto na</option>
+          <option value="Ready" ${o.status === 'Ready' ? 'selected' : ''}>Ready — Handa na</option>
+          <option value="Completed" ${o.status === 'Completed' ? 'selected' : ''}>Delivered — Na-deliver na</option>
+          <option value="Cancelled" ${o.status === 'Cancelled' ? 'selected' : ''}>Cancelled — Kinansela</option>
         </select>
 
-        <button class="outline-btn" data-update-order="${esc(o.id)}">
-          Update status
+        <button type="button" class="outline-btn" data-update-order="${esc(o.id)}">
+          Update Status
         </button>
       </article>
     `).join('');
@@ -237,33 +238,47 @@ async function loadOrders(){
     $$('[data-update-order]').forEach(button => {
       button.onclick = async () => {
         const id = button.dataset.updateOrder;
-        const select = $(`[data-status-for="${CSS.escape(id)}"]`);
+        const card = button.closest('.order-card');
+        const select = card.querySelector('[data-status-for]');
         const status = select.value;
 
         button.disabled = true;
+        button.textContent = 'Saving...';
+
         try {
-          const { error } = await db
+          const { data, error } = await db
             .from('orders')
             .update({ status })
-            .eq('id', id);
+            .eq('id', id)
+            .select('id, status');
 
           if (error) throw error;
 
-          toast('Na-update ang order status!');
+          if (!data || data.length === 0) {
+            throw new Error(
+              'Walang order na na-update. Suriin ang Supabase UPDATE at SELECT policies.'
+            );
+          }
+
+          toast('Na-update ang status: ' + status);
           await loadOrders();
+
         } catch (err) {
           toast('Hindi na-update: ' + err.message);
         } finally {
           button.disabled = false;
+          button.textContent = 'Update Status';
         }
       };
     });
 
   } catch (err) {
-    el.innerHTML = '<p>Hindi ma-load ang orders: ' + esc(err.message) + '</p>';
+    el.innerHTML =
+      '<p>Hindi ma-load ang orders: ' + esc(err.message) + '</p>';
     console.error('SIKAIN loadOrders error:', err);
   }
 }
+
 
 
   $('#refreshOrders').onclick=loadOrders;
