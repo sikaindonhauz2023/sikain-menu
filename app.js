@@ -538,10 +538,88 @@ function ensureStockField(){
   if (submit) f.insertBefore(wrap, submit);
   else f.appendChild(wrap);
 }
-  $('#productForm').onsubmit=async e=>{e.preventDefault();if(!db){toast('Demo mode lang: hindi pa permanent ang menu changes. Ikonekta ang Supabase para ma-save online.');return;}const f=e.currentTarget;const fd=new FormData(f);const id=String(fd.get('id')||'');let image_url=String(fd.get('image_url')||'').trim();try{if(f.elements.photo_file.files[0])image_url=await uploadFile(f.elements.photo_file.files[0],'foods');const payload={name:String(fd.get('name')).trim(),price:Number(fd.get('price')),category:String(fd.get('category')||'Others').trim()||'Others',image_url,description:String(fd.get('description')||''),
-available:f.elements.available.checked,
-stock_qty:Number(fd.get('stock_qty') || 0)
-};let result;if(id)result=await db.from('products').update(payload).eq('id',id);else result=await db.from('products').insert(payload);if(result.error)throw result.error;f.hidden=true;f.reset();toast('Na-save ang menu item.');await loadProducts();}catch(err){toast('Hindi na-save: '+err.message);}};
+
+$('#productForm').onsubmit = async e => {
+  e.preventDefault();
+
+  const f = e.currentTarget;
+
+  if (!db) {
+    toast('Walang Supabase connection. I-check ang config.js.');
+    console.error('SIKAIN: Supabase database is not connected.');
+    return;
+  }
+
+  const fd = new FormData(f);
+  const id = String(fd.get('id') || '').trim();
+
+  try {
+    let image_url = String(fd.get('image_url') || '').trim();
+
+    const photoInput = f.elements.photo_file;
+    const photo = photoInput?.files?.[0];
+
+    if (photo) {
+      image_url = await uploadFile(photo, 'foods');
+    }
+
+    const name = String(fd.get('name') || '').trim();
+    const price = Number(fd.get('price'));
+    const category =
+      String(fd.get('category') || 'Others').trim() || 'Others';
+
+    if (!name) {
+      toast('Ilagay ang pangalan ng pagkain.');
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      toast('Ilagay ang tamang presyo.');
+      return;
+    }
+
+    const payload = {
+      name,
+      price,
+      category,
+      image_url,
+      description: String(fd.get('description') || '').trim(),
+      available: Boolean(f.elements.available?.checked),
+      stock_qty: Number(fd.get('stock_qty') || 0)
+    };
+
+    console.log('SIKAIN: Saving product:', payload);
+
+    let result;
+
+    if (id) {
+      result = await db
+        .from('products')
+        .update(payload)
+        .eq('id', id);
+    } else {
+      result = await db
+        .from('products')
+        .insert(payload);
+    }
+
+    if (result.error) {
+      console.error('SIKAIN product save error:', result.error);
+      throw result.error;
+    }
+
+    toast('Na-save ang menu item.');
+    f.hidden = true;
+    f.reset();
+
+    await loadProducts();
+
+  } catch (err) {
+    console.error('SIKAIN product save failed:', err);
+    toast('Hindi na-save: ' + (err.message || String(err)));
+  }
+};
+
 $('#newProduct').onclick=()=>{
   const f=$('#productForm');
   f.reset();
