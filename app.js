@@ -489,10 +489,93 @@ $('#cancelProduct').onclick=()=>{
   f.reset();
 };
 
-  function fillSettingsForms(){const a=$('#appearanceForm'),d=$('#deliveryForm');for(const k of ['store_name','slogan','logo_url','theme_color','background_color','font_family','banner_url'])if(a.elements[k])a.elements[k].value=settings[k]??defaultSettings[k]??'';for(const k of ['store_address','facebook_url','maps_api_key','delivery_base_fee','delivery_per_km','max_delivery_km'])if(d.elements[k])d.elements[k].value=settings[k]??defaultSettings[k]??'';}
+ 
+function ensureDeliveryTimeFields() {
+  const form = $('#deliveryForm');
+  if (!form || form.elements.waiting_minutes) return;
+
+  const grid = document.createElement('div');
+  grid.className = 'form-grid';
+  grid.innerHTML = `
+    <label>
+      Waiting time (minutes)
+      <input type="number" name="waiting_minutes" min="0" max="180" value="5" required>
+    </label>
+    <label>
+      Cooking time (minutes)
+      <input type="number" name="cooking_minutes" min="1" max="240" value="15" required>
+    </label>
+    <label>
+      Delivery time (minutes)
+      <input type="number" name="delivery_minutes" min="1" max="240" value="20" required>
+    </label>
+  `;
+
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) form.insertBefore(grid, submit);
+  else form.appendChild(grid);
+}
+
+function fillSettingsForms() {
+  ensureDeliveryTimeFields();
+
+  const a = $('#appearanceForm');
+  const d = $('#deliveryForm');
+
+  for (const k of [
+    'store_name', 'slogan', 'logo_url', 'theme_color',
+    'background_color', 'font_family', 'banner_url'
+  ]) {
+    if (a.elements[k]) {
+      a.elements[k].value = settings[k] ?? defaultSettings[k] ?? '';
+    }
+  }
+
+  const timeDefaults = {
+    waiting_minutes: 5,
+    cooking_minutes: 15,
+    delivery_minutes: 20
+  };
+
+  for (const k of [
+    'store_address', 'facebook_url', 'maps_api_key',
+    'delivery_base_fee', 'delivery_per_km', 'max_delivery_km',
+    'waiting_minutes', 'cooking_minutes', 'delivery_minutes'
+  ]) {
+    if (d.elements[k]) {
+      d.elements[k].value =
+        settings[k] ?? timeDefaults[k] ?? defaultSettings[k] ?? '';
+    }
+  }
+}
+
   async function saveSettings(values){if(db){for(const [key,value] of Object.entries(values)){const {error}=await db.from('store_settings').upsert({key,value},{onConflict:'key'});if(error)throw error;}}else{settings={...settings,...values};demoWrite('settings',settings);}settings={...settings,...values};applySettings();}
   $('#appearanceForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const fd=new FormData(f);try{let logo_url=String(fd.get('logo_url')||'').trim(),banner_url=String(fd.get('banner_url')||'').trim();if(f.elements.logo_file.files[0])logo_url=await uploadFile(f.elements.logo_file.files[0],'logos');if(f.elements.banner_file.files[0])banner_url=await uploadFile(f.elements.banner_file.files[0],'banners');await saveSettings({store_name:String(fd.get('store_name')).trim(),slogan:String(fd.get('slogan')).trim(),logo_url,theme_color:String(fd.get('theme_color')),background_color:String(fd.get('background_color')),font_family:String(fd.get('font_family')),banner_url});toast('Na-save ang website appearance.');}catch(err){toast('Hindi na-save: '+err.message);}};
-  $('#deliveryForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,fd=new FormData(f);try{await saveSettings({store_address:String(fd.get('store_address')).trim(),facebook_url:String(fd.get('facebook_url')).trim(),maps_api_key:String(fd.get('maps_api_key')).trim(),delivery_base_fee:Number(fd.get('delivery_base_fee')),delivery_per_km:Number(fd.get('delivery_per_km')),max_delivery_km:Number(fd.get('max_delivery_km'))});toast('Na-save ang store at delivery settings.');}catch(err){toast('Hindi na-save: '+err.message);}};
+  
+$('#deliveryForm').onsubmit = async e => {
+  e.preventDefault();
+  const f = e.currentTarget;
+  const fd = new FormData(f);
+
+  try {
+    await saveSettings({
+      store_address: String(fd.get('store_address') || '').trim(),
+      facebook_url: String(fd.get('facebook_url') || '').trim(),
+      maps_api_key: String(fd.get('maps_api_key') || '').trim(),
+      delivery_base_fee: Number(fd.get('delivery_base_fee')),
+      delivery_per_km: Number(fd.get('delivery_per_km')),
+      max_delivery_km: Number(fd.get('max_delivery_km')),
+      waiting_minutes: Number(fd.get('waiting_minutes')),
+      cooking_minutes: Number(fd.get('cooking_minutes')),
+      delivery_minutes: Number(fd.get('delivery_minutes'))
+    });
+
+    toast('Na-save ang store, delivery at time settings.');
+  } catch (err) {
+    toast('Hindi na-save: ' + err.message);
+  }
+};
+
   $$('[data-admin-tab]').forEach(b=>b.onclick=()=>{$$('[data-admin-tab]').forEach(x=>x.classList.toggle('active',x===b));$$('.admin-section').forEach(s=>s.hidden=true);$('#admin'+b.dataset.adminTab[0].toUpperCase()+b.dataset.adminTab.slice(1)).hidden=false;});
   async function init(){if(!configured)toast('Preview mode: i-setup ang Supabase para gumana ang real orders at admin.');await loadSettings();await loadProducts();renderCart();ensureMyOrderHistoryUI();await loadMyOrderHistory();if(db){db.auth.onAuthStateChange((_event,s)=>{session=s;});}}
   init();
