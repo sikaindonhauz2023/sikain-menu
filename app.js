@@ -213,20 +213,109 @@ document.getElementById('orderType').addEventListener('change', async function (
       el.innerHTML=order?`<div class="panel"><span class="status-pill">${esc(order.status||'Pending')}</span><h2>Order ${esc(order.order_code||code)}</h2><p>${esc(order.customer_name||'Customer')} · ${esc(order.order_type||'')}</p><p>${Array.isArray(order.items)?order.items.map(i=>`${esc(i.qty)}× ${esc(i.name)}`).join('<br>'):''}</p><h3>Total: ${money(order.total)}</h3><p class="muted small">Order status: Pending → Preparing → Ready → Completed.</p></div>`:'<div class="panel">Hindi makita ang order. I-check ang order number at subukan ulit.</div>';
     }catch(err){console.error('SIKAIN track order error:',err);el.innerHTML='<div class="panel">Hindi ma-check ang order ngayon. Subukan ulit mamaya.</div>';}
   }
-  async function loadMyOrderHistory(){
-    ensureMyOrderHistoryUI();
-    const el=$('#myOrderHistoryList');
-    if(!el)return;
-    const codes=getMyOrderCodes();
-    if(!codes.length){el.innerHTML='<p class="muted">Wala ka pang order na naka-save sa browser/device na ito.</p>';return;}
-    el.innerHTML='<p class="muted">Kinukuha ang order history...</p>';
-    const results=await Promise.all(codes.map(async code=>{try{return await fetchOrderByCode(code);}catch(err){console.warn('History lookup failed for',code,err);return null;}}));
-    const orders=results.filter(Boolean);
-    if(!orders.length){el.innerHTML='<p class="muted">Hindi makuha ang history ngayon. Maaari mong subukan ulit mamaya.</p><button type="button" class="outline-btn" id="refreshMyOrderHistory">Refresh history</button>';$('#refreshMyOrderHistory').onclick=loadMyOrderHistory;return;}
-    el.innerHTML=orders.map(o=>`<article class="order-card"><h3>${esc(o.order_code||'Order')}</h3><p><strong>Status:</strong> ${esc(o.status||'Pending')}</p><p>${Array.isArray(o.items)?o.items.map(i=>`${esc(i.qty)}× ${esc(i.name)}`).join(', '):''}</p><p><strong>Total:</strong> ${money(o.total)}</p><button type="button" class="outline-btn" data-view-history-order="${esc(o.order_code||'')}">View order</button></article>`).join('');
-    $$('[data-view-history-order]',el).forEach(b=>b.onclick=()=>{const code=b.dataset.viewHistoryOrder;$('#trackCode').value=code;showView('track');lookupOrder(code);});
-    const refresh=document.createElement('button');refresh.type='button';refresh.className='outline-btn';refresh.textContent='Refresh history';refresh.style.marginTop='10px';refresh.onclick=loadMyOrderHistory;el.appendChild(refresh);
+  
+async function loadMyOrderHistory() {
+  ensureMyOrderHistoryUI();
+
+  const el = $('#myOrderHistoryList');
+  if (!el) return;
+
+  el.innerHTML = `
+    <button type="button" class="outline-btn"
+      id="refreshMyOrderHistory"
+      style="width:100%;margin-bottom:12px">
+      🔄 Refresh History
+    </button>
+    <div id="myOrderHistoryResults">
+      <p class="muted">Kinukuha ang order history...</p>
+    </div>
+  `;
+
+  const refreshBtn = $('#refreshMyOrderHistory');
+  const resultsEl = $('#myOrderHistoryResults');
+
+  refreshBtn.onclick = loadMyOrderHistory;
+
+  const codes = getMyOrderCodes();
+
+  if (!codes.length) {
+    resultsEl.innerHTML =
+      '<p class="muted">Wala pang order na naka-save sa device na ito.</p>';
+    return;
   }
+
+  refreshBtn.disabled = true;
+  refreshBtn.textContent = 'Kinukuha ang latest status...';
+
+  try {
+    const results = await Promise.all(
+      codes.map(async code => {
+        try {
+          return await fetchOrderByCode(code);
+        } catch (err) {
+          console.warn('History lookup failed for', code, err);
+          return null;
+        }
+      })
+    );
+
+    const orders = results.filter(Boolean);
+
+    if (!orders.length) {
+      resultsEl.innerHTML = `
+        <p class="muted">
+          Hindi makuha ang history ngayon.
+          Pindutin ang Refresh History para subukan ulit.
+        </p>`;
+      return;
+    }
+
+    resultsEl.innerHTML = orders.map(o => {
+      const code = o.order_code || '';
+      const status = o.status || 'Pending';
+      const items = Array.isArray(o.items)
+        ? o.items.map(i =>
+            `${esc(i.qty)} × ${esc(i.name)}`
+          ).join(', ')
+        : 'Order details';
+
+      return `
+        <article class="order-card" style="margin-bottom:12px">
+          <h3>Order ${esc(code)}</h3>
+          <p><strong>Status:</strong>
+            <span class="status-pill">${esc(status)}</span>
+          </p>
+          <p>${items}</p>
+          <p><strong>Total:</strong> ${money(o.total)}</p>
+          <button type="button"
+            class="outline-btn"
+            data-view-history-order="${esc(code)}"
+            style="width:100%">
+            Tingnan ang Order Status
+          </button>
+        </article>
+      `;
+    }).join('');
+
+    $$('[data-view-history-order]', resultsEl).forEach(button => {
+      button.onclick = async () => {
+        const code = button.dataset.viewHistoryOrder;
+        $('#trackCode').value = code;
+        showView('track');
+        await lookupOrder(code);
+      };
+    });
+
+  } catch (err) {
+    console.error('Load order history failed:', err);
+    resultsEl.innerHTML =
+      '<p class="muted">May problema sa pagkuha ng history. Subukan ulit.</p>';
+  } finally {
+    refreshBtn.disabled = false;
+    refreshBtn.textContent = '🔄 Refresh History';
+  }
+}
+
   $('#trackForm').onsubmit=e=>{e.preventDefault();lookupOrder($('#trackCode').value.trim());};
   $('#adminLogin').onsubmit=async e=>{e.preventDefault();if(!db){$('#loginMessage').textContent='Demo mode: ikonekta muna ang Supabase at gumawa ng admin account. Walang secure admin login sa demo mode.';return;}const f=new FormData(e.currentTarget);const {data,error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error){$('#loginMessage').textContent=error.message;return;}session=data.session;await refreshAdmin();};
   $('#adminLogout').onclick=async()=>{if(db)await db.auth.signOut();session=null;$('#adminContent').hidden=true;$('#adminLogin').hidden=false;$('#adminLogout').hidden=true;toast('Naka-log out na.');};
