@@ -292,6 +292,22 @@ async function uploadFile(file, folder) {
 }
 
   $('#productForm').onsubmit=async e=>{e.preventDefault();if(!db){toast('Demo mode lang: hindi pa permanent ang menu changes. Ikonekta ang Supabase para ma-save online.');return;}const f=e.currentTarget;const fd=new FormData(f);const id=String(fd.get('id')||'');let image_url=String(fd.get('image_url')||'').trim();try{if(f.elements.photo_file.files[0])image_url=await uploadFile(f.elements.photo_file.files[0],'foods');const payload={name:String(fd.get('name')).trim(),price:Number(fd.get('price')),category:String(fd.get('category')||'Others').trim()||'Others',image_url,description:String(fd.get('description')||''),available:f.elements.available.checked};let result;if(id)result=await db.from('products').update(payload).eq('id',id);else result=await db.from('products').insert(payload);if(result.error)throw result.error;f.hidden=true;f.reset();toast('Na-save ang menu item.');await loadProducts();}catch(err){toast('Hindi na-save: '+err.message);}};
+$('#newProduct').onclick=()=>{
+  const f=$('#productForm');
+  f.reset();
+  f.elements.id.value='';
+  f.elements.available.checked=true;
+  $('#productFormTitle').textContent='Add food';
+  f.hidden=false;
+  f.scrollIntoView({behavior:'smooth',block:'start'});
+};
+
+$('#cancelProduct').onclick=()=>{
+  const f=$('#productForm');
+  f.hidden=true;
+  f.reset();
+};
+
   function fillSettingsForms(){const a=$('#appearanceForm'),d=$('#deliveryForm');for(const k of ['store_name','slogan','logo_url','theme_color','background_color','font_family','banner_url'])if(a.elements[k])a.elements[k].value=settings[k]??defaultSettings[k]??'';for(const k of ['store_address','facebook_url','maps_api_key','delivery_base_fee','delivery_per_km','max_delivery_km'])if(d.elements[k])d.elements[k].value=settings[k]??defaultSettings[k]??'';}
   async function saveSettings(values){if(db){for(const [key,value] of Object.entries(values)){const {error}=await db.from('store_settings').upsert({key,value},{onConflict:'key'});if(error)throw error;}}else{settings={...settings,...values};demoWrite('settings',settings);}settings={...settings,...values};applySettings();}
   $('#appearanceForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const fd=new FormData(f);try{let logo_url=String(fd.get('logo_url')||'').trim(),banner_url=String(fd.get('banner_url')||'').trim();if(f.elements.logo_file.files[0])logo_url=await uploadFile(f.elements.logo_file.files[0],'logos');if(f.elements.banner_file.files[0])banner_url=await uploadFile(f.elements.banner_file.files[0],'banners');await saveSettings({store_name:String(fd.get('store_name')).trim(),slogan:String(fd.get('slogan')).trim(),logo_url,theme_color:String(fd.get('theme_color')),background_color:String(fd.get('background_color')),font_family:String(fd.get('font_family')),banner_url});toast('Na-save ang website appearance.');}catch(err){toast('Hindi na-save: '+err.message);}};
