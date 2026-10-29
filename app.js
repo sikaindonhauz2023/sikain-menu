@@ -210,15 +210,84 @@ document.getElementById('orderType').addEventListener('change', async function (
     }
     return (demoRead('orders')||[]).find(o=>String(o.order_code||'').toLowerCase()===code.toLowerCase())||null;
   }
-  async function lookupOrder(code){
-    const el=$('#trackResult');
-    if(!code){el.innerHTML='<div class="panel">Ilagay ang order number.</div>';return;}
-    el.innerHTML='<div class="panel">Hinahanap ang order...</div>';
-    try{
-      const order=await fetchOrderByCode(code);
-      el.innerHTML=order?`<div class="panel"><span class="status-pill">${esc(order.status||'Pending')}</span><h2>Order ${esc(order.order_code||code)}</h2><p>${esc(order.customer_name||'Customer')} · ${esc(order.order_type||'')}</p><p>${Array.isArray(order.items)?order.items.map(i=>`${esc(i.qty)}× ${esc(i.name)}`).join('<br>'):''}</p><h3>Total: ${money(order.total)}</h3><p class="muted small">Order status: Pending → Preparing → Ready → Completed.</p></div>`:'<div class="panel">Hindi makita ang order. I-check ang order number at subukan ulit.</div>';
-    }catch(err){console.error('SIKAIN track order error:',err);el.innerHTML='<div class="panel">Hindi ma-check ang order ngayon. Subukan ulit mamaya.</div>';}
+  
+async function lookupOrder(code) {
+  const el = $('#trackResult');
+
+  if (!code) {
+    el.innerHTML = '<div class="panel">Ilagay ang order number.</div>';
+    return;
   }
+
+  el.innerHTML = '<div class="panel">Hinahanap ang order...</div>';
+
+  try {
+    const order = await fetchOrderByCode(code);
+
+    if (!order) {
+      el.innerHTML = '<div class="panel">Hindi makita ang order. I-check ang order number at subukan ulit.</div>';
+      return;
+    }
+
+    const createdAt = order.created_at ? new Date(order.created_at) : null;
+    const validDate = createdAt && !Number.isNaN(createdAt.getTime());
+
+    const waiting = Math.max(0, Number(settings.waiting_minutes ?? 5));
+    const cooking = Math.max(1, Number(settings.cooking_minutes ?? 15));
+    const delivery = Math.max(1, Number(settings.delivery_minutes ?? 20));
+
+    const readyMinutes = waiting + cooking;
+    const totalMinutes = readyMinutes +
+      (String(order.order_type || '').toLowerCase() === 'delivery' ? delivery : 0);
+
+    const formatDate = date =>
+      date.toLocaleString('en-PH', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+
+    const readyAt = validDate
+      ? new Date(createdAt.getTime() + readyMinutes * 60000)
+      : null;
+
+    const arrivalAt = validDate
+      ? new Date(createdAt.getTime() + totalMinutes * 60000)
+      : null;
+
+    const timeInfo = validDate
+      ? `
+        <div class="order-time-info">
+          <p><strong>Order date/time:</strong> ${esc(formatDate(createdAt))}</p>
+          <p><strong>Waiting time:</strong> ${waiting} minutes</p>
+          <p><strong>Cooking time:</strong> ${cooking} minutes</p>
+          <p><strong>Estimated ready time:</strong> ${esc(formatDate(readyAt))}</p>
+          ${String(order.order_type || '').toLowerCase() === 'delivery'
+            ? `<p><strong>Estimated delivery time:</strong> ${esc(formatDate(arrivalAt))}</p>`
+            : ''}
+          <p class="muted small">Tantiyang oras lamang ito at maaaring magbago depende sa dami ng orders at biyahe.</p>
+        </div>
+      `
+      : '<p class="muted small">Hindi pa available ang petsa at oras ng order mula sa tracking data.</p>';
+
+    el.innerHTML = `
+      <div class="panel">
+        <span class="status-pill">${esc(order.status || 'Pending')}</span>
+        <h2>Order ${esc(order.order_code || code)}</h2>
+        <p>${esc(order.customer_name || 'Customer')} · ${esc(order.order_type || '')}</p>
+        ${timeInfo}
+        <p>${Array.isArray(order.items)
+          ? order.items.map(i => `${esc(i.qty)}× ${esc(i.name)}`).join('<br>')
+          : ''}</p>
+        <h3>Total: ${money(order.total)}</h3>
+        <p class="muted small">Order status: Pending → Preparing → Ready → Completed.</p>
+      </div>
+    `;
+  } catch (err) {
+    console.error('SIKAIN track order error:', err);
+    el.innerHTML = '<div class="panel">Hindi ma-check ang order ngayon. Subukan ulit mamaya.</div>';
+  }
+}
+
   
 async function loadMyOrderHistory() {
   ensureMyOrderHistoryUI();
