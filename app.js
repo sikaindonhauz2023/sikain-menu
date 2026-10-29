@@ -223,6 +223,8 @@ async function lookupOrder(code) {
 
   try {
     const order = await fetchOrderByCode(code);
+    console.log('SIKAIN TRACK ORDER:', order);
+console.log('SIKAIN CREATED AT:', order?.created_at);
 
     if (!order) {
       el.innerHTML = '<div class="panel">Hindi makita ang order. I-check ang order number at subukan ulit.</div>';
