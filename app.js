@@ -424,7 +424,8 @@ async function loadOrders(){
   function renderAdminProducts(){const el=$('#adminProducts');if(!el)return;el.innerHTML=products.length?products.map(p=>`<div class="admin-product"><img src="${esc(photo(p))}" alt=""><div><h3>${esc(p.name)} ${p.available?'':'(Unavailable)'}</h3><p>${esc(p.category||'Others')} · ${money(p.price)}</p><p>${esc(p.description||'')}</p></div><div class="button-row"><button class="outline-btn" data-edit-product="${esc(p.id)}">Edit</button><button class="outline-btn" data-delete-product="${esc(p.id)}">Delete</button></div></div>`).join(''):'<p class="muted">Wala pang menu items.</p>';
     $$('[data-edit-product]').forEach(b=>b.onclick=()=>{const p=products.find(x=>String(x.id)===b.dataset.editProduct);if(!p)return;const f=$('#productForm');f.hidden=false;$('#productFormTitle').textContent='Edit food';ensureStockField();
 for(const k of ['id','name','price','category','image_url','description'])f.elements[k].value=p[k]??'';
-f.elements.stock_qty.value=p.stock_qty??999;f.elements[k].value=p[k]??'';f.elements.available.checked=!!p.available;f.scrollIntoView({behavior:'smooth'});});
+f.elements.stock_qty.value=p.stock_qty??999;
+f.elements.available.checked=!!p.available;f.scrollIntoView({behavior:'smooth'});});
     $$('[data-delete-product]').forEach(b=>b.onclick=async()=>{if(!confirm('Sigurado bang buburahin ang menu item na ito?'))return;let error=null;if(db){({error}=await db.from('products').delete().eq('id',b.dataset.deleteProduct));}else{products=products.filter(p=>String(p.id)!==b.dataset.deleteProduct);demoWrite('products',products);}if(error)toast(error.message);else{toast('Na-delete ang menu item.');await loadProducts();}});
   }
 async function uploadFile(file, folder) {
