@@ -422,7 +422,9 @@ async function loadOrders(){
   $('#refreshOrders').onclick=loadOrders;
   function printReceipt(o){const lines=(o.items||[]).map(i=>`<tr><td>${esc(i.qty)}x ${esc(i.name)}</td><td style="text-align:right">${money(i.line_total??i.price*i.qty)}</td></tr>`).join('');const w=window.open('','_blank','width=360,height=650');if(!w){toast('Payagan ang pop-up para makapag-print.');return;}w.document.write(`<!doctype html><html><head><title>Receipt ${esc(o.order_code)}</title><style>body{font:12px monospace;width:280px;margin:8px auto;color:#000}h2,p{text-align:center;margin:5px 0}hr{border:0;border-top:1px dashed #000;margin:10px 0}table{width:100%;border-collapse:collapse}td{padding:4px 0;vertical-align:top}.total{font-size:15px;font-weight:bold}</style></head><body><h2>${esc(settings.store_name||'SIKAIN')}</h2><p>${esc(settings.slogan||'Lokal na Lasang Atin.')}</p><p>${esc(settings.store_address||'')}</p><hr><p>ORDER RECEIPT</p><p>${esc(o.order_code)}</p><p>${esc(o.created_at?new Date(o.created_at).toLocaleString('en-PH'):new Date().toLocaleString('en-PH'))}</p><hr><p style="text-align:left">Customer: ${esc(o.customer_name)}<br>Phone: ${esc(o.phone)}<br>Type: ${esc(o.order_type)}<br>Address: ${esc(o.address||'')}<br>Payment: ${esc(o.payment_method||'')}</p><hr><table>${lines}</table><hr><table><tr><td>Subtotal</td><td style="text-align:right">${money(o.subtotal)}</td></tr><tr><td>Delivery</td><td style="text-align:right">${money(o.delivery_fee)}</td></tr><tr class="total"><td>TOTAL</td><td style="text-align:right">${money(o.total)}</td></tr></table><hr><p>Salamat sa pag-order!</p><p>${esc(o.notes||'')}</p><script>window.onload=()=>{window.print();};<\/script></body></html>`);w.document.close();}
   function renderAdminProducts(){const el=$('#adminProducts');if(!el)return;el.innerHTML=products.length?products.map(p=>`<div class="admin-product"><img src="${esc(photo(p))}" alt=""><div><h3>${esc(p.name)} ${p.available?'':'(Unavailable)'}</h3><p>${esc(p.category||'Others')} · ${money(p.price)}</p><p>${esc(p.description||'')}</p></div><div class="button-row"><button class="outline-btn" data-edit-product="${esc(p.id)}">Edit</button><button class="outline-btn" data-delete-product="${esc(p.id)}">Delete</button></div></div>`).join(''):'<p class="muted">Wala pang menu items.</p>';
-    $$('[data-edit-product]').forEach(b=>b.onclick=()=>{const p=products.find(x=>String(x.id)===b.dataset.editProduct);if(!p)return;const f=$('#productForm');f.hidden=false;$('#productFormTitle').textContent='Edit food';for(const k of ['id','name','price','category','image_url','description'])f.elements[k].value=p[k]??'';f.elements.available.checked=!!p.available;f.scrollIntoView({behavior:'smooth'});});
+    $$('[data-edit-product]').forEach(b=>b.onclick=()=>{const p=products.find(x=>String(x.id)===b.dataset.editProduct);if(!p)return;const f=$('#productForm');f.hidden=false;$('#productFormTitle').textContent='Edit food';ensureStockField();
+for(const k of ['id','name','price','category','image_url','description'])f.elements[k].value=p[k]??'';
+f.elements.stock_qty.value=p.stock_qty??999;f.elements[k].value=p[k]??'';f.elements.available.checked=!!p.available;f.scrollIntoView({behavior:'smooth'});});
     $$('[data-delete-product]').forEach(b=>b.onclick=async()=>{if(!confirm('Sigurado bang buburahin ang menu item na ito?'))return;let error=null;if(db){({error}=await db.from('products').delete().eq('id',b.dataset.deleteProduct));}else{products=products.filter(p=>String(p.id)!==b.dataset.deleteProduct);demoWrite('products',products);}if(error)toast(error.message);else{toast('Na-delete ang menu item.');await loadProducts();}});
   }
 async function uploadFile(file, folder) {
@@ -442,11 +444,37 @@ async function uploadFile(file, folder) {
 
   return db.storage.from('food-photos').getPublicUrl(path).data.publicUrl;
 }
+function ensureStockField(){
+  const f = $('#productForm');
+  if (!f || f.elements.stock_qty) return;
 
-  $('#productForm').onsubmit=async e=>{e.preventDefault();if(!db){toast('Demo mode lang: hindi pa permanent ang menu changes. Ikonekta ang Supabase para ma-save online.');return;}const f=e.currentTarget;const fd=new FormData(f);const id=String(fd.get('id')||'');let image_url=String(fd.get('image_url')||'').trim();try{if(f.elements.photo_file.files[0])image_url=await uploadFile(f.elements.photo_file.files[0],'foods');const payload={name:String(fd.get('name')).trim(),price:Number(fd.get('price')),category:String(fd.get('category')||'Others').trim()||'Others',image_url,description:String(fd.get('description')||''),available:f.elements.available.checked};let result;if(id)result=await db.from('products').update(payload).eq('id',id);else result=await db.from('products').insert(payload);if(result.error)throw result.error;f.hidden=true;f.reset();toast('Na-save ang menu item.');await loadProducts();}catch(err){toast('Hindi na-save: '+err.message);}};
+  const wrap = document.createElement('div');
+  const label = document.createElement('label');
+  const input = document.createElement('input');
+
+  label.textContent = 'Stock Quantity';
+  input.type = 'number';
+  input.name = 'stock_qty';
+  input.min = '0';
+  input.step = '1';
+  input.value = '999';
+  input.required = true;
+
+  wrap.append(label, input);
+
+  const submit = f.querySelector('button[type="submit"]');
+  if (submit) f.insertBefore(wrap, submit);
+  else f.appendChild(wrap);
+}
+  $('#productForm').onsubmit=async e=>{e.preventDefault();if(!db){toast('Demo mode lang: hindi pa permanent ang menu changes. Ikonekta ang Supabase para ma-save online.');return;}const f=e.currentTarget;const fd=new FormData(f);const id=String(fd.get('id')||'');let image_url=String(fd.get('image_url')||'').trim();try{if(f.elements.photo_file.files[0])image_url=await uploadFile(f.elements.photo_file.files[0],'foods');const payload={name:String(fd.get('name')).trim(),price:Number(fd.get('price')),category:String(fd.get('category')||'Others').trim()||'Others',image_url,description:String(fd.get('description')||''),
+available:f.elements.available.checked,
+stock_qty:Number(fd.get('stock_qty') || 0)
+};let result;if(id)result=await db.from('products').update(payload).eq('id',id);else result=await db.from('products').insert(payload);if(result.error)throw result.error;f.hidden=true;f.reset();toast('Na-save ang menu item.');await loadProducts();}catch(err){toast('Hindi na-save: '+err.message);}};
 $('#newProduct').onclick=()=>{
   const f=$('#productForm');
   f.reset();
+  ensureStockField();
+f.elements.stock_qty.value=999;
   f.elements.id.value='';
   f.elements.available.checked=true;
   $('#productFormTitle').textContent='Add food';
