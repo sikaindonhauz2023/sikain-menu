@@ -168,7 +168,13 @@ document.getElementById('orderType').addEventListener('change', async function (
   function makeCode(){return 'SK-'+Math.random().toString(36).slice(2,8).toUpperCase();}
   $('#checkoutForm').onsubmit=async e=>{e.preventDefault();if(!cart.length){toast('Magdagdag muna ng pagkain sa cart.');return;}const f=new FormData(e.currentTarget);const orderType=f.get('order_type');const address=String(f.get('address')||'').trim();if(orderType==='delivery'&&!address){toast('Ilagay ang delivery address.');return;}if(orderType==='delivery'&&distanceKm===null){toast('Pindutin muna ang Kalkulahin ang delivery fee.');return;}if(orderType==='delivery'&&distanceKm>Number(settings.max_delivery_km||10)){toast('Lampas sa delivery coverage ang address.');return;}
     const code=makeCode();const payload={order_code:code,customer_name:String(f.get('customer_name')).trim(),phone:String(f.get('phone')).trim(),order_type:orderType,address:orderType==='delivery'?address:'Store pickup',payment_method:String(f.get('payment_method')),notes:String(f.get('notes')||''),items:cart.map(p=>({id:p.id,name:p.name,price:Number(p.price),qty:p.qty,line_total:Number(p.price)*p.qty})),subtotal:Number(subtotal().toFixed(2)),delivery_fee:orderType==='delivery'?Number(deliveryFee.toFixed(2)):0,total:Number((subtotal()+(orderType==='delivery'?deliveryFee:0)).toFixed(2)),distance_km:orderType==='delivery'?distanceKm:null,status:'Pending'};
-    const btn=$('#checkoutForm button[type="submit"]');btn.disabled=true;btn.textContent='Isinusumite…';try{if(db){const {error}=await db.from('orders').insert(payload);if(error)throw error;}else{const orders=demoRead('orders')||[];orders.unshift({...payload,id:Date.now(),created_at:new Date().toISOString()});demoWrite('orders',orders);}
+    const btn=$('#checkoutForm button[type="submit"]');btn.disabled=true;btn.textContent='Isinusumite…';try{if(db){
+  const { error } = await db.rpc('place_sikain_order', {
+    order_payload: payload
+  });
+  if(error) throw error;
+  await loadProducts();
+}else{const orders=demoRead('orders')||[];orders.unshift({...payload,id:Date.now(),created_at:new Date().toISOString()});demoWrite('orders',orders);}
       lastOrderCode=code;saveMyOrderCode(code);cart=[];deliveryFee=0;distanceKm=null;renderCart();await loadMyOrderHistory();$('#trackCode').value=code;$('#trackResult').innerHTML=`<div class="panel"><h2>Salamat sa order mo!</h2><p>Order number: <strong>${esc(code)}</strong></p><p>I-save ang order number para ma-check ang status.</p><button class="primary-btn" id="viewMyOrder">Tingnan ang order</button></div>`;$('#viewMyOrder').onclick=()=>showView('track');document.getElementById('checkoutForm')?.reset();$('#deliveryFields').hidden=true;toast('Na-submit ang order! Order no. '+code);showView('track');try {
   await lookupOrder(code);
 } catch (lookupError) {
