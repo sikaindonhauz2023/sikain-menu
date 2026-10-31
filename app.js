@@ -1217,4 +1217,4 @@ async function loadLoyaltyAdmin() {
   });
 }
 
-ensureLoyaltyCustomerUI();
+
