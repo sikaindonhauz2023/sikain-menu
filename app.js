@@ -851,122 +851,361 @@ $('#deliveryForm').onsubmit = async e => {
     };
   }
 
-  function ensureLoyaltyAdminUI() {
-    const tabs = $('.admin-tabs');
-    const content = $('#adminContent');
-    if (!tabs || !content || $('#adminLoyalty')) return;
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.className = 'tab-btn';
-    tab.textContent = '🎡 Loyalty Rewards';
-    tab.onclick = () => {
-      $$('.admin-tabs .tab-btn').forEach(x => x.classList.toggle('active', x === tab));
-      $$('.admin-section').forEach(x => x.hidden = true);
-      $('#adminLoyalty').hidden = false;
-      loadLoyaltyAdmin();
-    };
-    tabs.appendChild(tab);
-    const section = document.createElement('section');
-    section.id = 'adminLoyalty';
-    section.className = 'admin-section';
-    section.hidden = true;
-    section.innerHTML = `
-      <h2>SIKAIN Loyalty Rewards</h2>
-      <div class="panel" style="padding:16px;margin-bottom:16px">
-        <h3>Event control</h3>
-        <p id="loyaltyEventStatus">Loading event...</p>
-        <button type="button" id="loyaltyEventToggle" class="primary-btn">Loading...</button>
-        <p class="small muted">Kapag CLOSED, patuloy ang completed-order counting pero hindi makakapag-spin ang customers.</p>
-        <label>Completed orders required per spin
-          <input id="loyaltyOrdersRequired" type="number" min="1" max="100" value="5">
-        </label>
-        <button type="button" id="saveLoyaltySettings" class="outline-btn">Save event settings</button>
-      </div>
-      <div class="panel" style="padding:16px;margin-bottom:16px">
-        <h3>Customize wheel prizes</h3>
-        <p class="small muted">Pumili ng kahit anong product mula sa SIKAIN menu. Ang enabled prizes lang ang puwedeng mapanalunan.</p>
-        <label>Select menu product
-          <select id="loyaltyPrizeProduct"><option value="">Choose a product...</option></select>
-        </label>
-        <button type="button" id="addLoyaltyPrize" class="primary-btn">+ Add prize</button>
-        <div id="loyaltyPrizeList" style="margin-top:14px"></div>
-      </div>
-      <div class="panel" style="padding:16px">
-        <h3>Redeem free meal</h3>
-        <label>Reward code
-          <input id="loyaltyRedeemCode" placeholder="SIKAIN-XXXXXXXX">
-        </label>
-        <button type="button" id="redeemLoyaltyReward" class="primary-btn">Mark as Redeemed</button>
-      </div>`;
-    content.appendChild(section);
-    $('#loyaltyEventToggle').onclick = async () => {
-      const { data, error } = await db.from('sikain_loyalty_settings')
-        .select('event_open').eq('id', 1).single();
-      if (error) return toast(error.message);
-      const { error: updateError } = await db.from('sikain_loyalty_settings')
-        .update({ event_open: !data.event_open, updated_at: new Date().toISOString() }).eq('id', 1);
-      if (updateError) return toast(updateError.message);
-      await loadLoyaltyAdmin();
-    };
-    $('#saveLoyaltySettings').onclick = async () => {
-      const n = Number($('#loyaltyOrdersRequired').value);
-      if (!Number.isInteger(n) || n < 1 || n > 100) return toast('Ilagay ang 1 hanggang 100.');
-      const { error } = await db.from('sikain_loyalty_settings')
-        .update({ orders_per_spin: n, updated_at: new Date().toISOString() }).eq('id', 1);
-      if (error) toast(error.message); else toast('Na-save ang loyalty settings.');
-    };
-    $('#addLoyaltyPrize').onclick = async () => {
-      const product_id = $('#loyaltyPrizeProduct').value;
-      if (!product_id) return toast('Pumili muna ng product.');
-      const { error } = await db.from('sikain_loyalty_prizes')
-        .upsert({ product_id, enabled: true }, { onConflict: 'product_id' });
-      if (error) toast(error.message); else { toast('Naidagdag ang prize.'); await loadLoyaltyAdmin(); }
-    };
-    $('#redeemLoyaltyReward').onclick = async () => {
-      const code = $('#loyaltyRedeemCode').value.trim();
-      if (!code) return toast('Ilagay ang reward code.');
-      const { data, error } = await db.rpc('sikain_redeem_loyalty_reward', { p_code: code });
-      if (error) toast('Hindi na-redeem: ' + error.message);
-      else { toast('Redeemed: ' + data); $('#loyaltyRedeemCode').value = ''; }
-    };
-  }
+  
+function ensureLoyaltyAdminUI() {
+  const tabs = $('.admin-tabs');
+  const content = $('#adminContent');
+  if (!tabs || !content || $('#adminLoyalty')) return;
 
-  async function loadLoyaltyAdmin() {
-    if (!db) return;
-    const { data: settingsRow, error: settingsError } = await db
-      .from('sikain_loyalty_settings').select('*').eq('id', 1).single();
-    if (settingsError) return toast(settingsError.message);
-    $('#loyaltyEventStatus').textContent = settingsRow.event_open ? 'Event status: OPEN' : 'Event status: CLOSED';
-    $('#loyaltyEventToggle').textContent = settingsRow.event_open ? 'CLOSE EVENT' : 'OPEN EVENT';
-    $('#loyaltyOrdersRequired').value = settingsRow.orders_per_spin || 5;
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'tab-btn';
+  tab.textContent = '🎡 Loyalty Rewards';
+  tab.onclick = () => {
+    $$('.admin-tabs .tab-btn').forEach(x =>
+      x.classList.toggle('active', x === tab)
+    );
+    $$('.admin-section').forEach(x => x.hidden = true);
+    $('#adminLoyalty').hidden = false;
+    loadLoyaltyAdmin();
+  };
+  tabs.appendChild(tab);
 
-    const select = $('#loyaltyPrizeProduct');
-    select.innerHTML = '<option value="">Choose a product...</option>' +
-      products.map(p => `<option value="${esc(p.id)}">${esc(p.name)} — ${money(p.price)}</option>`).join('');
-    const { data: prizes, error } = await db.from('sikain_loyalty_prizes')
-      .select('id,product_id,enabled,products(id,name,price,image_url,available,stock_qty)')
-      .order('created_at', { ascending: false });
+  const section = document.createElement('section');
+  section.id = 'adminLoyalty';
+  section.className = 'admin-section';
+  section.hidden = true;
+
+  section.innerHTML = `
+    <h2>SIKAIN Loyalty Rewards</h2>
+
+    <div class="panel" style="padding:16px;margin-bottom:16px">
+      <h3>Event control</h3>
+      <p id="loyaltyEventStatus">Loading event...</p>
+      <button type="button" id="loyaltyEventToggle" class="primary-btn">Loading...</button>
+
+      <label>Completed orders required per spin
+        <input id="loyaltyOrdersRequired" type="number" min="1" max="100" value="5">
+      </label>
+      <button type="button" id="saveLoyaltySettings" class="outline-btn">Save event settings</button>
+    </div>
+
+    <div class="panel" style="padding:16px;margin-bottom:16px">
+      <h3>Add existing menu prize</h3>
+      <label>Select menu product
+        <select id="loyaltyPrizeProduct">
+          <option value="">Choose a product...</option>
+        </select>
+      </label>
+      <button type="button" id="addLoyaltyPrize" class="primary-btn">+ Add menu prize</button>
+    </div>
+
+    <div class="panel" style="padding:16px;margin-bottom:16px">
+      <h3>Add custom prize</h3>
+
+      <label>Prize name
+        <input id="customPrizeName" placeholder="Example: Free Softdrinks">
+      </label>
+
+      <label>Prize type
+        <select id="customPrizeType">
+          <option value="product">Product / Free item</option>
+          <option value="cash">Cash</option>
+          <option value="discount">Discount</option>
+          <option value="voucher">Voucher</option>
+          <option value="custom">Custom reward</option>
+        </select>
+      </label>
+
+      <label>Prize value (₱ or discount amount)
+        <input id="customPrizeValue" type="number" min="0" step="0.01" value="0">
+      </label>
+
+      <label>Winning probability / weight
+        <input id="customPrizeProbability" type="number" min="0.01" step="0.01" value="1">
+      </label>
+
+      <label>Available quantity (0 = unlimited)
+        <input id="customPrizeQuantity" type="number" min="0" step="1" value="0">
+      </label>
+
+      <label>Prize image
+        <input id="customPrizeImage" type="file" accept="image/*">
+      </label>
+
+      <button type="button" id="addCustomLoyaltyPrize" class="primary-btn">
+        + Save custom prize
+      </button>
+    </div>
+
+    <div class="panel" style="padding:16px;margin-bottom:16px">
+      <h3>Manage wheel prizes</h3>
+      <p class="small muted">
+        Ang probability ay relative weight. Mas mataas ang value, mas mataas ang chance.
+        Ang quantity na 0 ay unlimited.
+      </p>
+      <div id="loyaltyPrizeList">Loading prizes...</div>
+    </div>
+
+    <div class="panel" style="padding:16px">
+      <h3>Redeem reward</h3>
+      <label>Reward code
+        <input id="loyaltyRedeemCode" placeholder="SIKAIN-XXXXXXXX">
+      </label>
+      <button type="button" id="redeemLoyaltyReward" class="primary-btn">
+        Mark as Redeemed
+      </button>
+    </div>
+  `;
+
+  content.appendChild(section);
+
+  $('#loyaltyEventToggle').onclick = async () => {
+    const { data, error } = await db.from('sikain_loyalty_settings')
+      .select('event_open').eq('id', 1).single();
+
     if (error) return toast(error.message);
-    $('#loyaltyPrizeList').innerHTML = prizes?.length ? prizes.map(pr => {
-      const p = pr.products || {};
-      return `<div class="admin-product" style="display:flex;gap:10px;align-items:center;margin:10px 0">
-        <div style="flex:1"><strong>${esc(p.name || 'Deleted product')}</strong><p>${money(p.price)} · ${pr.enabled ? 'Enabled' : 'Disabled'}</p></div>
-        <button type="button" class="outline-btn" data-prize-toggle="${esc(pr.id)}" data-enabled="${pr.enabled}">${pr.enabled ? 'Disable' : 'Enable'}</button>
-        <button type="button" class="outline-btn" data-prize-delete="${esc(pr.id)}">Remove</button>
-      </div>`;
-    }).join('') : '<p class="muted">Wala pang prizes. Magdagdag mula sa menu sa itaas.</p>';
-    $$('[data-prize-toggle]').forEach(b => b.onclick = async () => {
-      const { error: e } = await db.from('sikain_loyalty_prizes')
-        .update({ enabled: b.dataset.enabled !== 'true' }).eq('id', b.dataset.prizeToggle);
-      if (e) toast(e.message); else loadLoyaltyAdmin();
-    });
-    $$('[data-prize-delete]').forEach(b => b.onclick = async () => {
-      if (!confirm('Alisin ang prize na ito?')) return;
-      const { error: e } = await db.from('sikain_loyalty_prizes').delete().eq('id', b.dataset.prizeDelete);
-      if (e) toast(e.message); else loadLoyaltyAdmin();
-    });
-  }
 
-  async function init(){if(!configured)toast('Preview mode: i-setup ang Supabase para gumana ang real orders at admin.');await loadSettings();await loadProducts();renderCart();ensureMyOrderHistoryUI();ensureLoyaltyCustomerUI();ensureLoyaltyAdminUI();await loadMyOrderHistory();if(db){db.auth.onAuthStateChange((_event,s)=>{session=s;});}}
-  init();
-})();
+    const { error: updateError } = await db.from('sikain_loyalty_settings')
+      .update({
+        event_open: !data.event_open,
+        updated_at: new Date().toISOString()
+      }).eq('id', 1);
+
+    if (updateError) return toast(updateError.message);
+    await loadLoyaltyAdmin();
+  };
+
+  $('#saveLoyaltySettings').onclick = async () => {
+    const n = Number($('#loyaltyOrdersRequired').value);
+
+    if (!Number.isInteger(n) || n < 1 || n > 100) {
+      return toast('Ilagay ang 1 hanggang 100.');
+    }
+
+    const { error } = await db.from('sikain_loyalty_settings')
+      .update({
+        orders_per_spin: n,
+        updated_at: new Date().toISOString()
+      }).eq('id', 1);
+
+    if (error) toast(error.message);
+    else toast('Na-save ang loyalty settings.');
+  };
+
+  $('#addLoyaltyPrize').onclick = async () => {
+    const product_id = $('#loyaltyPrizeProduct').value;
+    if (!product_id) return toast('Pumili muna ng product.');
+
+    const { error } = await db.from('sikain_loyalty_prizes')
+      .upsert({ product_id, enabled: true }, { onConflict: 'product_id' });
+
+    if (error) toast(error.message);
+    else {
+      toast('Naidagdag ang menu prize.');
+      await loadLoyaltyAdmin();
+    }
+  };
+
+  $('#addCustomLoyaltyPrize').onclick = async () => {
+    const name = $('#customPrizeName').value.trim();
+    const type = $('#customPrizeType').value;
+    const value = Number($('#customPrizeValue').value);
+    const probability = Number($('#customPrizeProbability').value);
+    const quantity = Number($('#customPrizeQuantity').value);
+    const file = $('#customPrizeImage').files[0];
+
+    if (!name) return toast('Ilagay ang prize name.');
+    if (!Number.isFinite(value) || value < 0) return toast('Invalid prize value.');
+    if (!Number.isFinite(probability) || probability <= 0) return toast('Probability must be above 0.');
+    if (!Number.isInteger(quantity) || quantity < 0) return toast('Invalid quantity.');
+
+    let imageUrl = null;
+
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = 'loyalty/' + Date.now() + '-' + safeName;
+
+      const { error: uploadError } = await db.storage
+        .from('food-photos')
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) return toast('Image upload error: ' + uploadError.message);
+
+      const { data: imageData } = db.storage
+        .from('food-photos')
+        .getPublicUrl(path);
+
+      imageUrl = imageData.publicUrl;
+    }
+
+    const { error } = await db.from('sikain_loyalty_prizes')
+      .insert({
+        product_id: null,
+        prize_name: name,
+        prize_type: type,
+        prize_value: value,
+        prize_image: imageUrl,
+        win_probability: probability,
+        prize_quantity: quantity,
+        enabled: true
+      });
+
+    if (error) return toast(error.message);
+
+    toast('Naidagdag ang custom prize!');
+    $('#customPrizeName').value = '';
+    $('#customPrizeValue').value = '0';
+    $('#customPrizeProbability').value = '1';
+    $('#customPrizeQuantity').value = '0';
+    $('#customPrizeImage').value = '';
+
+    await loadLoyaltyAdmin();
+  };
+
+  $('#redeemLoyaltyReward').onclick = async () => {
+    const code = $('#loyaltyRedeemCode').value.trim();
+    if (!code) return toast('Ilagay ang reward code.');
+
+    const { data, error } = await db.rpc(
+      'sikain_redeem_loyalty_reward',
+      { p_code: code }
+    );
+
+    if (error) toast('Hindi na-redeem: ' + error.message);
+    else {
+      toast('Redeemed: ' + data);
+      $('#loyaltyRedeemCode').value = '';
+    }
+  };
+}
+
+
+ 
+async function loadLoyaltyAdmin() {
+  if (!db) return;
+
+  const { data: settingsRow, error: settingsError } = await db
+    .from('sikain_loyalty_settings')
+    .select('*')
+    .eq('id', 1)
+    .single();
+
+  if (settingsError) return toast(settingsError.message);
+
+  $('#loyaltyEventStatus').textContent =
+    settingsRow.event_open ? 'Event status: OPEN' : 'Event status: CLOSED';
+
+  $('#loyaltyEventToggle').textContent =
+    settingsRow.event_open ? 'CLOSE EVENT' : 'OPEN EVENT';
+
+  $('#loyaltyOrdersRequired').value = settingsRow.orders_per_spin || 5;
+
+  const select = $('#loyaltyPrizeProduct');
+
+  select.innerHTML = '<option value="">Choose a product...</option>' +
+    products.map(p =>
+      `<option value="${esc(p.id)}">${esc(p.name)} — ${money(p.price)}</option>`
+    ).join('');
+
+  const { data: prizes, error } = await db
+    .from('sikain_loyalty_prizes')
+    .select('id,product_id,enabled,prize_name,prize_type,prize_value,prize_image,win_probability,prize_quantity,products(id,name,price,image_url,available,stock_qty)')
+    .order('created_at', { ascending: false });
+
+  if (error) return toast(error.message);
+
+  $('#loyaltyPrizeList').innerHTML = prizes?.length
+    ? prizes.map(pr => {
+        const p = pr.products || {};
+        const name = pr.prize_name || p.name || 'Deleted product';
+        const type = pr.prize_type || 'product';
+        const probability = Number(pr.win_probability || 0);
+        const quantity = Number(pr.prize_quantity || 0);
+        const image = pr.prize_image || p.image_url || '';
+
+        return `
+          <div class="admin-product" style="display:flex;gap:10px;align-items:center;margin:12px 0;padding:10px;border-bottom:1px solid #ddd">
+            ${image ? `<img src="${esc(image)}" alt="" style="width:65px;height:65px;object-fit:cover;border-radius:8px">` : ''}
+            <div style="flex:1;min-width:0">
+              <strong>${esc(name)}</strong>
+              <p>${esc(type)} · Value: ${money(Number(pr.prize_value || p.price || 0))}</p>
+              <p>Weight: ${probability} · Quantity: ${quantity === 0 ? 'Unlimited' : quantity}</p>
+              <p>${pr.enabled ? 'Enabled' : 'Disabled'}</p>
+            </div>
+            <button type="button" class="outline-btn" data-prize-edit="${esc(pr.id)}">Edit</button>
+            <button type="button" class="outline-btn" data-prize-toggle="${esc(pr.id)}" data-enabled="${pr.enabled}">${pr.enabled ? 'Disable' : 'Enable'}</button>
+            <button type="button" class="outline-btn" data-prize-delete="${esc(pr.id)}">Remove</button>
+          </div>
+        `;
+      }).join('')
+    : '<p class="muted">Wala pang prizes.</p>';
+
+  $$('[data-prize-edit]').forEach(b => b.onclick = async () => {
+    const pr = prizes.find(x => String(x.id) === b.dataset.prizeEdit);
+    if (!pr) return;
+
+    const name = prompt('Prize name:', pr.prize_name || pr.products?.name || '');
+    if (name === null) return;
+    if (!name.trim()) return toast('Kailangan ang prize name.');
+
+    const probabilityText = prompt('Winning probability / weight:', String(pr.win_probability ?? 1));
+    if (probabilityText === null) return;
+
+    const quantityText = prompt('Quantity (0 = unlimited):', String(pr.prize_quantity ?? 0));
+    if (quantityText === null) return;
+
+    const valueText = prompt('Prize value:', String(pr.prize_value ?? 0));
+    if (valueText === null) return;
+
+    const probability = Number(probabilityText);
+    const quantity = Number(quantityText);
+    const value = Number(valueText);
+
+    if (!Number.isFinite(probability) || probability <= 0) return toast('Invalid probability.');
+    if (!Number.isInteger(quantity) || quantity < 0) return toast('Invalid quantity.');
+    if (!Number.isFinite(value) || value < 0) return toast('Invalid value.');
+
+    const { error: updateError } = await db
+      .from('sikain_loyalty_prizes')
+      .update({
+        prize_name: name.trim(),
+        win_probability: probability,
+        prize_quantity: quantity,
+        prize_value: value
+      })
+      .eq('id', pr.id);
+
+    if (updateError) toast(updateError.message);
+    else {
+      toast('Na-update ang prize.');
+      await loadLoyaltyAdmin();
+    }
+  });
+
+  $$('[data-prize-toggle]').forEach(b => b.onclick = async () => {
+    const { error: e } = await db
+      .from('sikain_loyalty_prizes')
+      .update({ enabled: b.dataset.enabled !== 'true' })
+      .eq('id', b.dataset.prizeToggle);
+
+    if (e) toast(e.message);
+    else await loadLoyaltyAdmin();
+  });
+
+  $$('[data-prize-delete]').forEach(b => b.onclick = async () => {
+    if (!confirm('Sigurado ka bang aalisin ang prize na ito?')) return;
+
+    const { error: e } = await db
+      .from('sikain_loyalty_prizes')
+      .delete()
+      .eq('id', b.dataset.prizeDelete);
+
+    if (e) toast(e.message);
+    else {
+      toast('Naalis ang prize.');
+      await loadLoyaltyAdmin();
+    }
+  });
+}
+
