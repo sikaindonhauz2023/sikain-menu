@@ -748,133 +748,511 @@ $('#deliveryForm').onsubmit = async e => {
   // SIKAIN LOYALTY REWARDS
   // Customer verification uses phone + a completed order code.
   // =====================================
-  function ensureLoyaltyCustomerUI() {
-    if ($('#sikainLoyaltyCustomer')) return;
-    const menuGrid = $('#menuGrid');
-    if (!menuGrid) return;
-    const section = document.createElement('section');
-    section.id = 'sikainLoyaltyCustomer';
-    section.className = 'panel';
-    section.style.cssText = 'margin:24px 0;padding:20px;';
-    section.innerHTML = `
-      <h2>🎡 SIKAIN Rewards</h2>
-      <p class="muted">Bawat required number of completed orders = 1 guaranteed free product reward.</p>
-      <form id="loyaltyCheckForm" class="form-grid">
-        <label>Cellphone number
-          <input name="phone" required inputmode="tel" maxlength="30" placeholder="09XXXXXXXXX">
-        </label>
-        <label>Completed order number
-          <input name="order_code" required maxlength="30" placeholder="Hal. SK-ABC123">
-        </label>
-        <div class="wide"><button class="primary-btn" type="submit">Check my rewards</button></div>
-      </form>
-      <div id="loyaltyCustomerResult" aria-live="polite"></div>`;
-    menuGrid.insertAdjacentElement('afterend', section);
-    $('#loyaltyCheckForm').onsubmit = async e => {
-      e.preventDefault();
-      const fd = new FormData(e.currentTarget);
-      const phone = String(fd.get('phone') || '').trim();
-      const order_code = String(fd.get('order_code') || '').trim();
-      const result = $('#loyaltyCustomerResult');
-      result.textContent = 'Checking your loyalty progress...';
-      try {
-        const { data, error } = await db.rpc('sikain_get_loyalty_progress', {
-          p_phone: phone, p_order_code: order_code
-        });
-        if (error) throw error;
-        const progress = Array.isArray(data) ? data[0] : data;
-        if (!progress) throw new Error('Walang loyalty record. Siguraduhing Completed na ang order.');
-        const completed = Number(progress.completed_orders || 0);
-        const spins = Number(progress.spins_available || 0);
-        const openResult = await db.from('sikain_loyalty_settings')
-          .select('event_open,orders_per_spin').eq('id', 1).maybeSingle();
-        if (openResult.error) throw openResult.error;
-        const threshold = Number(openResult.data?.orders_per_spin || 5);
-        const remainder = completed % threshold;
-        const current = remainder === 0 && completed > 0 ? threshold : remainder;
-        const eventOpen = !!openResult.data?.event_open;
-        const { data: wheelPrizeRows, error: prizeLoadError } = await db
-  .from('sikain_loyalty_prizes')
-  .select('id,product_id,prize_name,prize_type,prize_image,products(id,name)')
-  .eq('enabled', true);
+ 
+function ensureLoyaltyCustomerUI() {
+  if ($('#sikainLoyaltyCustomer')) return;
 
-if (prizeLoadError) throw prizeLoadError;
+  const menuGrid = $('#menuGrid');
+  if (!menuGrid) return;
 
-const wheelPrizes = (wheelPrizeRows || [])
-  .map(x => ({
-    ...x,
-    displayName: x.prize_name || x.products?.name || 'Unnamed prize'
-  }));
-        if (spins > 0 && eventOpen && !wheelPrizes.length) {
-          throw new Error('Wala pang enabled prizes. Makipag-ugnayan sa SIKAIN.');
-        }
-        const wheelColors = ['#f4a340','#f7d46b','#e76f24','#f2b4a0','#91c7a5','#8db6df','#c6a0d5'];
-        const wheelGradient = wheelPrizes.length
-          ? 'conic-gradient(' + wheelPrizes.map((x,i) => {
-              const a = i * 360 / wheelPrizes.length;
-              const b = (i + 1) * 360 / wheelPrizes.length;
-              return `${wheelColors[i % wheelColors.length]} ${a}deg ${b}deg`;
-            }).join(',') + ')'
-          : 'conic-gradient(#f4a340 0 25%,#f7d46b 25% 50%,#e76f24 50% 75%,#f2b4a0 75% 100%)';
-        result.innerHTML = `
-          <div style="margin-top:16px">
-            <p><strong>Completed orders:</strong> ${completed}</p>
-            <p><strong>Progress:</strong> ${current}/${threshold}</p>
-            <div style="height:12px;background:#eadfd7;border-radius:20px;overflow:hidden">
-              <div style="height:100%;width:${current/threshold*100}%;background:var(--brand);border-radius:20px"></div>
-            </div>
-            <p><strong>Available spins:</strong> ${spins}</p>
-            <p>${eventOpen ? 'Event is OPEN.' : 'Event is CLOSED. Patuloy ang counting; disabled muna ang spin.'}</p>
-            <div id="loyaltyWheelWrap" style="text-align:center;margin-top:16px">
-              <div id="loyaltyWheel" style="width:min(78vw,300px);height:min(78vw,300px);max-width:300px;max-height:300px;border-radius:50%;margin:12px auto;border:8px solid #8b451f;background:${wheelGradient};display:grid;place-items:center;box-shadow:0 4px 14px #0002;transition:transform 5s cubic-bezier(.12,.75,.12,1)">
-                <strong style="background:white;border-radius:50%;padding:18px">SIKAIN</strong>
-              </div>
-              <p class="small muted">${wheelPrizes.map(x => esc(x.displayName)).join(' · ')}</p>
-              <button type="button" class="primary-btn" id="loyaltySpinButton" ${(!eventOpen || spins < 1) ? 'disabled' : ''}>🎡 SPIN NOW</button>
-              <div id="loyaltyWinResult" style="margin-top:12px"></div>
-            </div>
-          </div>`;
-        const spinButton = $('#loyaltySpinButton');
-        spinButton.onclick = async () => {
-          spinButton.disabled = true;
-          spinButton.textContent = 'Spinning...';
-          try {
-            const { data: win, error: spinError } = await db.rpc('sikain_spin_wheel', {
-              p_phone: phone, p_order_code: order_code
-            });
-            if (spinError) throw spinError;
-            const prize = Array.isArray(win) ? win[0] : win;
-            if (!prize) throw new Error('Walang reward result.');
-            const wheel = $('#loyaltyWheel');
-           const prizeIndex = wheelPrizes.findIndex(
-  x => x.displayName === prize.product_name
-);
-            if (prizeIndex < 0) throw new Error('Hindi makita ang napiling prize sa wheel.');
-            const segmentCenter = prizeIndex * 360 / wheelPrizes.length + 180 / wheelPrizes.length;
-            const rotation = 360 * 7 + (360 - segmentCenter);
-            wheel.style.transform = `rotate(${rotation}deg)`;
-            setTimeout(() => {
-              $('#loyaltyWinResult').innerHTML = `
-                <div style="padding:16px;border-radius:12px;background:#fff3e8">
-                  <h2>🎉 YOU WON!</h2>
-                  <h3>${esc(prize.product_name)}</h3>
-                  <p>Your free SIKAIN reward code:</p>
-                  <strong style="font-size:20px;letter-spacing:1px">${esc(prize.reward_code)}</strong>
-                  <p class="small muted">Ipakita ang code sa cashier. Isang beses lang ito puwedeng i-redeem.</p>
-                </div>`;
-              spinButton.textContent = 'Reward claimed';
-            }, 5100);
-          } catch (err) {
-            toast('Hindi makapag-spin: ' + (err.message || String(err)));
-            spinButton.disabled = false;
-            spinButton.textContent = '🎡 SPIN NOW';
-          }
-        };
-      } catch (err) {
-        result.innerHTML = `<p class="small" style="color:#b42318">${esc(err.message || String(err))}</p>`;
+  const section = document.createElement('section');
+  section.id = 'sikainLoyaltyCustomer';
+  section.className = 'panel';
+  section.style.cssText = 'margin:24px 0;padding:22px;overflow:hidden;';
+
+  section.innerHTML = `
+    <style>
+      #sikainLoyaltyCustomer {
+        background:linear-gradient(145deg,#fff8ec,#fff0dc);
+        border:2px solid #e76f24;
+        border-radius:20px;
       }
-    };
-  }
+
+      .sikain-wheel-area {
+        position:relative;
+        width:min(82vw,340px);
+        margin:30px auto 20px;
+        padding-top:12px;
+      }
+
+      #loyaltyWheel {
+        width:100%;
+        aspect-ratio:1;
+        border-radius:50%;
+        display:block;
+        transition:transform 5.5s cubic-bezier(.12,.75,.12,1);
+        filter:drop-shadow(0 7px 9px #0003);
+      }
+
+      .sikain-wheel-pointer {
+        position:absolute;
+        z-index:5;
+        top:-7px;
+        left:50%;
+        transform:translateX(-50%);
+        width:0;
+        height:0;
+        border-left:19px solid transparent;
+        border-right:19px solid transparent;
+        border-top:40px solid #d92323;
+        filter:drop-shadow(0 3px 2px #0005);
+      }
+
+      .sikain-wheel-center {
+        position:absolute;
+        left:50%;
+        top:50%;
+        transform:translate(-50%,-50%);
+        width:76px;
+        height:76px;
+        border-radius:50%;
+        background:#fff;
+        border:6px solid #8b451f;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-weight:900;
+        color:#e76f24;
+        box-shadow:0 3px 8px #0003;
+        z-index:2;
+      }
+
+      .sikain-wheel-spin {
+        width:100%;
+        max-width:300px;
+        padding:15px;
+        border:0;
+        border-radius:30px;
+        background:linear-gradient(135deg,#e76f24,#ff9c35);
+        color:white;
+        font-size:18px;
+        font-weight:900;
+        cursor:pointer;
+        box-shadow:0 5px 12px #0002;
+      }
+
+      .sikain-wheel-spin:disabled {
+        opacity:.5;
+        cursor:not-allowed;
+      }
+
+      .sikain-progress {
+        height:15px;
+        border-radius:20px;
+        background:#ead9c8;
+        overflow:hidden;
+        margin:10px 0;
+      }
+
+      .sikain-progress-fill {
+        height:100%;
+        background:linear-gradient(90deg,#e76f24,#ffbd43);
+        border-radius:20px;
+        transition:width .4s;
+      }
+
+      .sikain-wheel-result {
+        padding:18px;
+        border-radius:16px;
+        background:#fff;
+        border:2px dashed #e76f24;
+        margin-top:16px;
+      }
+
+      .sikain-wheel-prize-list {
+        display:flex;
+        flex-wrap:wrap;
+        justify-content:center;
+        gap:7px;
+        margin:14px 0;
+      }
+
+      .sikain-wheel-prize-list span {
+        background:#fff;
+        border:1px solid #e8c6a8;
+        border-radius:20px;
+        padding:6px 11px;
+        font-size:12px;
+        font-weight:700;
+      }
+    </style>
+
+    <div style="text-align:center">
+      <div style="font-size:36px">🎡</div>
+      <h2>SIKAIN LUCKY WHEEL</h2>
+      <p>Order more. Collect points. Win free food!</p>
+    </div>
+
+    <form id="loyaltyCheckForm" class="form-grid">
+      <label>Cellphone number
+        <input name="phone" required inputmode="tel"
+          maxlength="30" placeholder="09XXXXXXXXX">
+      </label>
+
+      <label>Completed order number
+        <input name="order_code" required maxlength="30"
+          placeholder="Hal. SK-ABC123">
+      </label>
+
+      <div class="wide">
+        <button class="primary-btn" type="submit">
+          CHECK MY REWARDS
+        </button>
+      </div>
+    </form>
+
+    <div id="loyaltyCustomerResult" aria-live="polite"></div>
+  `;
+
+  menuGrid.insertAdjacentElement('afterend', section);
+
+  $('#loyaltyCheckForm').onsubmit = async e => {
+    e.preventDefault();
+
+    const fd = new FormData(e.currentTarget);
+    const phone = String(fd.get('phone') || '').trim();
+    const order_code = String(fd.get('order_code') || '').trim();
+    const result = $('#loyaltyCustomerResult');
+
+    result.textContent = 'Checking your rewards...';
+
+    try {
+      const { data, error } = await db.rpc(
+        'sikain_get_loyalty_progress',
+        {
+          p_phone: phone,
+          p_order_code: order_code
+        }
+      );
+
+      if (error) throw error;
+
+      const progress = Array.isArray(data) ? data[0] : data;
+
+      if (!progress) {
+        throw new Error(
+          'Walang loyalty record. Siguraduhing Completed na ang order.'
+        );
+      }
+
+      const completed = Number(progress.completed_orders || 0);
+      const spins = Number(progress.spins_available || 0);
+
+      const { data: setting, error: settingError } = await db
+        .from('sikain_loyalty_settings')
+        .select('event_open,orders_per_spin')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (settingError) throw settingError;
+
+      const threshold = Math.max(
+        1,
+        Number(setting?.orders_per_spin || 5)
+      );
+
+      const eventOpen = !!setting?.event_open;
+
+      const remainder = completed % threshold;
+      const current = remainder === 0 && completed > 0
+        ? threshold
+        : remainder;
+
+      const percentage = Math.min(
+        100,
+        current / threshold * 100
+      );
+
+      const { data: prizeRows, error: prizeError } = await db
+        .from('sikain_loyalty_prizes')
+        .select('product_id,products(id,name)')
+        .eq('enabled', true);
+
+      if (prizeError) throw prizeError;
+
+      const wheelPrizes = (prizeRows || [])
+        .filter(x => x.products?.name);
+
+      if (!wheelPrizes.length && eventOpen && spins > 0) {
+        throw new Error(
+          'Wala pang enabled prizes. Makipag-ugnayan sa SIKAIN.'
+        );
+      }
+
+      const colors = [
+        '#e76f24',
+        '#ffc247',
+        '#df5545',
+        '#6dbb91',
+        '#548bc4',
+        '#a77bc5',
+        '#f08caa',
+        '#d7a83c',
+        '#55aeb0',
+        '#edaa55'
+      ];
+
+      result.innerHTML = `
+        <div style="margin-top:22px;text-align:center">
+
+          <h3>YOUR LOYALTY PROGRESS</h3>
+
+          <div style="display:flex;justify-content:space-around;gap:10px">
+            <div>
+              <strong style="font-size:25px">${completed}</strong>
+              <p class="small muted">Completed orders</p>
+            </div>
+
+            <div>
+              <strong style="font-size:25px">${spins}</strong>
+              <p class="small muted">Available spins</p>
+            </div>
+          </div>
+
+          <p><strong>Progress: ${current}/${threshold}</strong></p>
+
+          <div class="sikain-progress">
+            <div class="sikain-progress-fill"
+              style="width:${percentage}%"></div>
+          </div>
+
+          <p class="small muted">
+            ${current >= threshold
+              ? 'Congratulations! Naabot mo na ang required orders.'
+              : `${threshold - current} more completed orders bago ang next spin.`}
+          </p>
+
+          <p style="font-weight:bold;color:${eventOpen ? '#16834a' : '#c0392b'}">
+            ${eventOpen ? '● EVENT OPEN' : '● EVENT CLOSED'}
+          </p>
+
+          <h3 style="margin-top:25px">SPIN TO WIN!</h3>
+
+          <div class="sikain-wheel-area">
+            <div class="sikain-wheel-pointer"></div>
+
+            <canvas id="loyaltyWheel"
+              width="700" height="700"></canvas>
+
+            <div class="sikain-wheel-center">SIKAIN</div>
+          </div>
+
+          <div class="sikain-wheel-prize-list">
+            ${wheelPrizes.map(x =>
+              `<span>🎁 ${esc(x.products.name)}</span>`
+            ).join('')}
+          </div>
+
+          <button type="button"
+            class="sikain-wheel-spin"
+            id="loyaltySpinButton"
+            ${(!eventOpen || spins < 1 || !wheelPrizes.length) ? 'disabled' : ''}>
+            🎡 SPIN THE WHEEL
+          </button>
+
+          <div id="loyaltyWinResult"></div>
+
+        </div>
+      `;
+
+      // DRAW THE ACTUAL PRIZE WHEEL
+      const canvas = $('#loyaltyWheel');
+      const ctx = canvas.getContext('2d');
+
+      function drawWheel() {
+        const cx = 350;
+        const cy = 350;
+        const radius = 330;
+        const count = wheelPrizes.length;
+
+        if (!count) {
+          ctx.fillStyle = '#eee';
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fill();
+          return;
+        }
+
+        const slice = Math.PI * 2 / count;
+
+        ctx.clearRect(0, 0, 700, 700);
+
+        wheelPrizes.forEach((item, i) => {
+          const start = -Math.PI / 2 + i * slice;
+          const end = start + slice;
+
+          // Colored prize segment
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, radius, start, end);
+          ctx.closePath();
+
+          ctx.fillStyle = colors[i % colors.length];
+          ctx.fill();
+
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 7;
+          ctx.stroke();
+
+          // Prize name
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(start + slice / 2);
+
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#fff';
+          ctx.shadowColor = '#0008';
+          ctx.shadowBlur = 4;
+          ctx.font = 'bold 27px Arial';
+
+          let name = String(item.products.name);
+          if (name.length > 17) {
+            name = name.slice(0, 15) + '...';
+          }
+
+          ctx.fillText(name, radius - 28, 0, radius * .65);
+          ctx.restore();
+        });
+
+        // Outer wheel border
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = '#8b451f';
+        ctx.lineWidth = 15;
+        ctx.stroke();
+
+        // Small decorative dots
+        for (let i = 0; i < 24; i++) {
+          const a = i * Math.PI * 2 / 24;
+          const x = cx + Math.cos(a) * 340;
+          const y = cy + Math.sin(a) * 340;
+
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff3c4';
+          ctx.fill();
+        }
+      }
+
+      drawWheel();
+
+      const spinButton = $('#loyaltySpinButton');
+
+      spinButton.onclick = async () => {
+        spinButton.disabled = true;
+        spinButton.textContent = '🎡 SPINNING...';
+
+        try {
+          // Supabase decides the actual winning prize
+          const { data: win, error: spinError } = await db.rpc(
+            'sikain_spin_wheel',
+            {
+              p_phone: phone,
+              p_order_code: order_code
+            }
+          );
+
+          if (spinError) throw spinError;
+
+          const prize = Array.isArray(win) ? win[0] : win;
+
+          if (!prize) {
+            throw new Error('Walang reward result.');
+          }
+
+          const prizeIndex = wheelPrizes.findIndex(
+            x => String(x.product_id) === String(prize.product_id)
+          );
+
+          if (prizeIndex < 0) {
+            throw new Error(
+              'Hindi makita ang winning prize sa wheel.'
+            );
+          }
+
+          // Align winning segment with fixed top arrow
+          const sliceDegrees = 360 / wheelPrizes.length;
+
+          const centerDegrees =
+            prizeIndex * sliceDegrees + sliceDegrees / 2 - 90;
+
+          const targetDegrees =
+            ((-90 - centerDegrees) % 360 + 360) % 360;
+
+          const rotation = 360 * 7 + targetDegrees;
+
+          const wheel = $('#loyaltyWheel');
+          wheel.style.transform = `rotate(${rotation}deg)`;
+
+          setTimeout(() => {
+            $('#loyaltyWinResult').innerHTML = `
+              <div class="sikain-wheel-result">
+
+                <div style="font-size:45px">🎉🏆🎉</div>
+
+                <h2 style="color:#e76f24">
+                  CONGRATULATIONS!
+                </h2>
+
+                <p>You won:</p>
+
+                <h2>${esc(prize.product_name)}</h2>
+
+                <p>Your SIKAIN reward code:</p>
+
+                <strong style="
+                  font-size:22px;
+                  letter-spacing:2px;
+                  color:#e76f24">
+                  ${esc(prize.reward_code)}
+                </strong>
+
+                <p class="small muted">
+                  Ipakita ang code sa cashier.
+                  Isang beses lang ito puwedeng i-redeem.
+                </p>
+
+                <button type="button"
+                  class="outline-btn"
+                  id="loyaltyCheckAgain">
+                  CHECK UPDATED REWARDS
+                </button>
+
+              </div>
+            `;
+
+            spinButton.textContent = '🎉 YOU WON!';
+
+            $('#loyaltyCheckAgain').onclick = () => {
+              $('#loyaltyCheckForm').requestSubmit();
+            };
+
+          }, 5700);
+
+        } catch (err) {
+          console.error('SIKAIN spin error:', err);
+
+          toast('Hindi makapag-spin: ' +
+            (err.message || String(err)));
+
+          spinButton.disabled = false;
+          spinButton.textContent = '🎡 SPIN THE WHEEL';
+        }
+      };
+
+    } catch (err) {
+      console.error('Loyalty error:', err);
+
+      result.innerHTML = `
+        <p style="color:#b42318">
+          ${esc(err.message || String(err))}
+        </p>
+      `;
+    }
+  };
+}
+
 
   
 function ensureLoyaltyAdminUI() {
