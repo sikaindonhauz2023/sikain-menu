@@ -1214,13 +1214,21 @@ async function loadLoyaltyAdmin() {
       .delete()
       .eq('id', b.dataset.prizeDelete);
 
-      if (e) toast(e.message);
+    if (e) toast(e.message);
     else {
       toast('Naalis ang prize.');
       await loadLoyaltyAdmin();
     }
   });
-}
+
+  (async function initCustomerPage() {
+    try {
+      await loadSettings();
+      await loadProducts();
+    } catch (error) {
+      console.error('SIKAIN customer loading error:', error);
+      toast('Hindi ma-load ang menu. Subukan ulit.');
+    }
+  })();
 
 })();
-
