@@ -777,11 +777,17 @@ $('#deliveryForm').onsubmit = async e => {
         const current = remainder === 0 && completed > 0 ? threshold : remainder;
         const eventOpen = !!openResult.data?.event_open;
         const { data: wheelPrizeRows, error: prizeLoadError } = await db
-          .from('sikain_loyalty_prizes')
-          .select('product_id,products(id,name)')
-          .eq('enabled', true);
-        if (prizeLoadError) throw prizeLoadError;
-        const wheelPrizes = (wheelPrizeRows || []).filter(x => x.products?.name);
+  .from('sikain_loyalty_prizes')
+  .select('id,product_id,prize_name,prize_type,prize_image,products(id,name)')
+  .eq('enabled', true);
+
+if (prizeLoadError) throw prizeLoadError;
+
+const wheelPrizes = (wheelPrizeRows || [])
+  .map(x => ({
+    ...x,
+    displayName: x.prize_name || x.products?.name || 'Unnamed prize'
+  }));
         if (spins > 0 && eventOpen && !wheelPrizes.length) {
           throw new Error('Wala pang enabled prizes. Makipag-ugnayan sa SIKAIN.');
         }
@@ -806,7 +812,7 @@ $('#deliveryForm').onsubmit = async e => {
               <div id="loyaltyWheel" style="width:min(78vw,300px);height:min(78vw,300px);max-width:300px;max-height:300px;border-radius:50%;margin:12px auto;border:8px solid #8b451f;background:${wheelGradient};display:grid;place-items:center;box-shadow:0 4px 14px #0002;transition:transform 5s cubic-bezier(.12,.75,.12,1)">
                 <strong style="background:white;border-radius:50%;padding:18px">SIKAIN</strong>
               </div>
-              <p class="small muted">${wheelPrizes.map(x => esc(x.products.name)).join(' · ')}</p>
+              <p class="small muted">${wheelPrizes.map(x => esc(x.displayName)).join(' · ')}</p>
               <button type="button" class="primary-btn" id="loyaltySpinButton" ${(!eventOpen || spins < 1) ? 'disabled' : ''}>🎡 SPIN NOW</button>
               <div id="loyaltyWinResult" style="margin-top:12px"></div>
             </div>
@@ -823,7 +829,9 @@ $('#deliveryForm').onsubmit = async e => {
             const prize = Array.isArray(win) ? win[0] : win;
             if (!prize) throw new Error('Walang reward result.');
             const wheel = $('#loyaltyWheel');
-            const prizeIndex = wheelPrizes.findIndex(x => String(x.product_id) === String(prize.product_id));
+           const prizeIndex = wheelPrizes.findIndex(
+  x => x.displayName === prize.product_name
+);
             if (prizeIndex < 0) throw new Error('Hindi makita ang napiling prize sa wheel.');
             const segmentCenter = prizeIndex * 360 / wheelPrizes.length + 180 / wheelPrizes.length;
             const rotation = 360 * 7 + (360 - segmentCenter);
@@ -1201,7 +1209,7 @@ async function loadLoyaltyAdmin() {
       .delete()
       .eq('id', b.dataset.prizeDelete);
 
-    if (e) toast(e.message);
+      if (e) toast(e.message);
     else {
       toast('Naalis ang prize.');
       await loadLoyaltyAdmin();
@@ -1209,3 +1217,4 @@ async function loadLoyaltyAdmin() {
   });
 }
 
+ensureLoyaltyCustomerUI();
