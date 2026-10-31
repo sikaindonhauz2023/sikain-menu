@@ -1074,83 +1074,121 @@ const prizeLabel = x =>
       const canvas = $('#loyaltyWheel');
       const ctx = canvas.getContext('2d');
 
-      function drawWheel() {
-        const cx = 350;
-        const cy = 350;
-        const radius = 330;
-        const count = wheelPrizes.length;
+      
+const wheelImageCache = {};
 
-        if (!count) {
-          ctx.fillStyle = '#eee';
-          ctx.beginPath();
-          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-          ctx.fill();
-          return;
-        }
+function drawWheel() {
+  const cx = 350;
+  const cy = 350;
+  const radius = 330;
+  const count = wheelPrizes.length;
 
-        const slice = Math.PI * 2 / count;
+  ctx.clearRect(0, 0, 700, 700);
 
-        ctx.clearRect(0, 0, 700, 700);
+  if (!count) {
+    ctx.fillStyle = '#eee';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
 
-        wheelPrizes.forEach((item, i) => {
-          const start = -Math.PI / 2 + i * slice;
-          const end = start + slice;
+  const slice = Math.PI * 2 / count;
 
-          // Colored prize segment
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.arc(cx, cy, radius, start, end);
-          ctx.closePath();
+  wheelPrizes.forEach((item, i) => {
+    const start = -Math.PI / 2 + i * slice;
+    const middle = start + slice / 2;
 
-          ctx.fillStyle = colors[i % colors.length];
-          ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, start, start + slice);
+    ctx.closePath();
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 7;
+    ctx.stroke();
 
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 7;
-          ctx.stroke();
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(middle);
 
-          // Prize name
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.rotate(start + slice / 2);
+    const imageUrl = item.prize_image || item.products?.image_url || '';
+    const imageX = 190;
+    const imageSize = 76;
 
-          ctx.textAlign = 'right';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = '#fff';
-          ctx.shadowColor = '#0008';
-          ctx.shadowBlur = 4;
-          ctx.font = 'bold 27px Arial';
-
-          let name = prizeLabel(item);
-          if (name.length > 17) {
-            name = name.slice(0, 15) + '...';
-          }
-
-          ctx.fillText(name, radius - 28, 0, radius * .65);
-          ctx.restore();
-        });
-
-        // Outer wheel border
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = '#8b451f';
-        ctx.lineWidth = 15;
-        ctx.stroke();
-
-        // Small decorative dots
-        for (let i = 0; i < 24; i++) {
-          const a = i * Math.PI * 2 / 24;
-          const x = cx + Math.cos(a) * 340;
-          const y = cy + Math.sin(a) * 340;
-
-          ctx.beginPath();
-          ctx.arc(x, y, 7, 0, Math.PI * 2);
-          ctx.fillStyle = '#fff3c4';
-          ctx.fill();
-        }
+    if (imageUrl) {
+      if (!(imageUrl in wheelImageCache)) {
+        const img = new Image();
+        wheelImageCache[imageUrl] = img;
+        img.onload = () => drawWheel();
+        img.onerror = () => {
+          wheelImageCache[imageUrl] = null;
+          drawWheel();
+        };
+        img.src = imageUrl;
       }
 
-      drawWheel();
+      const img = wheelImageCache[imageUrl];
+
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(imageX, 0, imageSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(
+          img,
+          imageX - imageSize / 2,
+          -imageSize / 2,
+          imageSize,
+          imageSize
+        );
+        ctx.restore();
+      } else {
+        ctx.font = '42px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🎁', imageX, 0);
+      }
+    } else {
+      ctx.font = '42px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('🎁', imageX, 0);
+    }
+
+    let name = prizeLabel(item);
+    if (name.length > 17) name = name.slice(0, 15) + '...';
+
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = '#0008';
+    ctx.shadowBlur = 4;
+    ctx.font = 'bold 23px Arial';
+    ctx.fillText(name, radius - 25, 0, 125);
+
+    ctx.restore();
+  });
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = '#8b451f';
+  ctx.lineWidth = 15;
+  ctx.stroke();
+
+  for (let i = 0; i < 24; i++) {
+    const a = i * Math.PI * 2 / 24;
+    const x = cx + Math.cos(a) * 340;
+    const y = cy + Math.sin(a) * 340;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff3c4';
+    ctx.fill();
+  }
+}
+
+drawWheel();
+
 
       const spinButton = $('#loyaltySpinButton');
 
