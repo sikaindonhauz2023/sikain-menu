@@ -1220,6 +1220,7 @@ async function loadLoyaltyAdmin() {
       await loadLoyaltyAdmin();
     }
   });
+}
 
   (async function initCustomerPage() {
     try {
