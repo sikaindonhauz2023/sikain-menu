@@ -964,14 +964,29 @@ function ensureLoyaltyCustomerUI() {
       );
 
       const { data: prizeRows, error: prizeError } = await db
-        .from('sikain_loyalty_prizes')
-        .select('product_id,products(id,name)')
-        .eq('enabled', true);
+  .from('sikain_loyalty_prizes')
+  .select('id,product_id,prize_name,prize_type,prize_value,prize_image,prize_quantity,win_probability,products(id,name,available,stock_qty)')
+  .eq('enabled', true);
 
-      if (prizeError) throw prizeError;
+if (prizeError) throw prizeError;
 
-      const wheelPrizes = (prizeRows || [])
-        .filter(x => x.products?.name);
+const wheelPrizes = (prizeRows || []).filter(x => {
+  const quantity = Number(x.prize_quantity || 0);
+  const hasQuantity = quantity === 0 || quantity > 0;
+  const product = x.products;
+
+  const productAvailable = !x.product_id ||
+    (product &&
+      product.available === true &&
+      (product.stock_qty == null || Number(product.stock_qty) > 0));
+
+  return hasQuantity &&
+    productAvailable &&
+    Number(x.win_probability || 0) > 0;
+});
+
+const prizeLabel = x =>
+  String(x.prize_name || x.products?.name || 'SIKAIN Reward');
 
       if (!wheelPrizes.length && eventOpen && spins > 0) {
         throw new Error(
@@ -1038,9 +1053,9 @@ function ensureLoyaltyCustomerUI() {
           </div>
 
           <div class="sikain-wheel-prize-list">
-            ${wheelPrizes.map(x =>
-              `<span>🎁 ${esc(x.products.name)}</span>`
-            ).join('')}
+           ${wheelPrizes.map(x =>
+  `<span>🎁 ${esc(prizeLabel(x))}</span>`
+).join('')}
           </div>
 
           <button type="button"
@@ -1106,7 +1121,7 @@ function ensureLoyaltyCustomerUI() {
           ctx.shadowBlur = 4;
           ctx.font = 'bold 27px Arial';
 
-          let name = String(item.products.name);
+          let name = prizeLabel(item);
           if (name.length > 17) {
             name = name.slice(0, 15) + '...';
           }
@@ -1161,9 +1176,15 @@ function ensureLoyaltyCustomerUI() {
             throw new Error('Walang reward result.');
           }
 
-          const prizeIndex = wheelPrizes.findIndex(
-            x => String(x.product_id) === String(prize.product_id)
-          );
+          const winningName = String(prize.product_name || '');
+
+const prizeIndex = wheelPrizes.findIndex(x => {
+  if (prize.product_id) {
+    return String(x.product_id) === String(prize.product_id);
+  }
+
+  return !x.product_id && prizeLabel(x) === winningName;
+});
 
           if (prizeIndex < 0) {
             throw new Error(
