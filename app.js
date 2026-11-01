@@ -1740,14 +1740,25 @@ async function loadLoyaltyAdmin() {
   });
 }
 
-  (async function initCustomerPage() {
-    try {
-      await loadSettings();
-      await loadProducts();
-    } catch (error) {
-      console.error('SIKAIN customer loading error:', error);
-      toast('Hindi ma-load ang menu. Subukan ulit.');
-    }
-  })();
 
+(async function initCustomerPage() {
+  console.log('SIKAIN: Starting customer page...');
+
+  try {
+    console.log('SIKAIN: Loading settings...');
+    await loadSettings();
+    console.log('SIKAIN: Settings loaded.');
+
+  } catch (error) {
+    console.error('SIKAIN SETTINGS INIT ERROR:', error);
+  }
+
+  try {
+    console.log('SIKAIN: Loading products...');
+    await loadProducts();
+    console.log('SIKAIN: Products loaded.');
+
+  } catch (error) {
+    console.error('SIKAIN PRODUCTS INIT ERROR:', error);
+  }
 })();
