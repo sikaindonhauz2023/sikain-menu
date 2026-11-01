@@ -1815,7 +1815,9 @@ async function loadLoyaltyAdmin() {
     await loadProducts();
     console.log('SIKAIN: Products loaded.');
 
-  } catch (error) {
+   } catch (error) {
     console.error('SIKAIN PRODUCTS INIT ERROR:', error);
   }
+})();
+
 })();
