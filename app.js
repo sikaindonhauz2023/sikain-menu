@@ -1,4 +1,5 @@
 (() => {
+  alert('TEST 1 - APP STARTED');
   alert('SIKAIN APP.JS RUNNING');
   const cfg = window.SIKAIN_CONFIG || {};
   const configured = cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_URL.includes('PASTE_') && !cfg.SUPABASE_ANON_KEY.includes('PASTE_');
