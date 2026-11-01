@@ -498,8 +498,44 @@ async function loadMyOrderHistory() {
   $('#trackForm').onsubmit=e=>{e.preventDefault();lookupOrder($('#trackCode').value.trim());};
   $('#adminLogin').onsubmit=async e=>{e.preventDefault();if(!db){$('#loginMessage').textContent='Demo mode: ikonekta muna ang Supabase at gumawa ng admin account. Walang secure admin login sa demo mode.';return;}const f=new FormData(e.currentTarget);const {data,error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error){$('#loginMessage').textContent=error.message;return;}session=data.session;await refreshAdmin();};
   $('#adminLogout').onclick=async()=>{if(db)await db.auth.signOut();session=null;$('#adminContent').hidden=true;$('#adminLogin').hidden=false;$('#adminLogout').hidden=true;toast('Naka-log out na.');};
-  async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();ensureLoyaltyAdminUI();await loadOrders();fillSettingsForms();applyWebsiteStatus();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
-  
+ 
+async function refreshAdmin(){
+  if(!db){
+    $('#adminLogin').hidden=false;
+    $('#adminContent').hidden=true;
+    return;
+  }
+
+  const {data,error}=await db.auth.getSession();
+
+  if(error){
+    console.error('Admin session error:',error);
+    return;
+  }
+
+  session=data.session;
+
+  if(session){
+    $('#adminLogin').hidden=true;
+    $('#adminContent').hidden=false;
+    $('#adminLogout').hidden=false;
+
+    await loadSettings();
+    await loadProducts();
+
+    ensureLoyaltyAdminUI();
+    await loadOrders();
+
+    fillSettingsForms();
+    applyWebsiteStatus();
+
+  }else{
+    $('#adminLogin').hidden=false;
+    $('#adminContent').hidden=true;
+    $('#adminLogout').hidden=true;
+  }
+}
+
 
 
 async function loadOrders(){
