@@ -581,45 +581,47 @@ async function loadOrders(){
           <option value="Cancelled" ${o.status === 'Cancelled' ? 'selected' : ''}>Cancelled — Kinansela</option>
         </select>
 
-        <button type="button" class="outline-btn" data-update-order="${esc(o.id)}">
-          Update Status
-        </button>
+       <button type="button" class="outline-btn" data-update-order="${esc(o.id)}">
+  Update Status
+</button>
+
+<button type="button" class="outline-btn" data-delete-order="${esc(o.id)}">
+  Delete Order
+</button>
       </article>
     `).join('');
 
-    $$('[data-update-order]').forEach(button => {
+        $$('[data-delete-order]').forEach(button => {
       button.onclick = async () => {
-        const id = button.dataset.updateOrder;
-        const card = button.closest('.order-card');
-        const select = card.querySelector('[data-status-for]');
-        const status = select.value;
+        const id = button.dataset.deleteOrder;
+
+        if (!confirm('Sigurado ka bang buburahin ang order na ito? Permanenteng mawawala ito sa records.')) {
+          return;
+        }
 
         button.disabled = true;
-        button.textContent = 'Saving...';
+        button.textContent = 'Deleting...';
 
         try {
           const { data, error } = await db
             .from('orders')
-            .update({ status })
+            .delete()
             .eq('id', id)
-            .select('id, status');
+            .select('id');
 
           if (error) throw error;
 
           if (!data || data.length === 0) {
-            throw new Error(
-              'Walang order na na-update. Suriin ang Supabase UPDATE at SELECT policies.'
-            );
+            throw new Error('Hindi nabura. Suriin ang Supabase DELETE policy.');
           }
 
-          toast('Na-update ang status: ' + status);
+          toast('Matagumpay na nabura ang order.');
           await loadOrders();
 
         } catch (err) {
-          toast('Hindi na-update: ' + err.message);
-        } finally {
+          toast('Delete failed: ' + err.message);
           button.disabled = false;
-          button.textContent = 'Update Status';
+          button.textContent = 'Delete Order';
         }
       };
     });
