@@ -541,6 +541,7 @@ async function refreshAdmin(){
 
 
 
+
 async function loadOrders(){
   const el = $('#ordersList');
   el.innerHTML = '<p>Kinukuha ang orders...</p>';
@@ -579,17 +580,55 @@ async function loadOrders(){
           <option value="Cancelled" ${o.status === 'Cancelled' ? 'selected' : ''}>Cancelled — Kinansela</option>
         </select>
 
-       <button type="button" class="outline-btn" data-update-order="${esc(o.id)}">
-  Update Status
-</button>
+        <button type="button" class="outline-btn" data-update-order="${esc(o.id)}">
+          Update Status
+        </button>
 
-<button type="button" class="outline-btn" data-delete-order="${esc(o.id)}">
-  Delete Order
-</button>
+        <button type="button" class="outline-btn" data-delete-order="${esc(o.id)}">
+          Delete Order
+        </button>
       </article>
     `).join('');
 
-        $$('[data-delete-order]').forEach(button => {
+    // UPDATE STATUS
+    $$('[data-update-order]').forEach(button => {
+      button.onclick = async () => {
+        const id = button.dataset.updateOrder;
+        const card = button.closest('.order-card');
+        const select = card.querySelector('[data-status-for]');
+        const status = select.value;
+
+        button.disabled = true;
+        button.textContent = 'Saving...';
+
+        try {
+          const { data, error } = await db
+            .from('orders')
+            .update({ status: status })
+            .eq('id', id)
+            .select('id, status');
+
+          if (error) throw error;
+
+          if (!data || data.length === 0) {
+            throw new Error('Walang order na na-update. Suriin ang Supabase UPDATE policy.');
+          }
+
+          toast('Matagumpay na na-update: ' + status);
+          await loadOrders();
+
+        } catch (err) {
+          toast('Hindi na-update: ' + err.message);
+          console.error('SIKAIN UPDATE STATUS ERROR:', err);
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Update Status';
+        }
+      };
+    });
+
+    // DELETE ORDER
+    $$('[data-delete-order]').forEach(button => {
       button.onclick = async () => {
         const id = button.dataset.deleteOrder;
 
@@ -618,6 +657,7 @@ async function loadOrders(){
 
         } catch (err) {
           toast('Delete failed: ' + err.message);
+          console.error('SIKAIN DELETE ERROR:', err);
           button.disabled = false;
           button.textContent = 'Delete Order';
         }
@@ -630,7 +670,6 @@ async function loadOrders(){
     console.error('SIKAIN loadOrders error:', err);
   }
 }
-
 
 
   $('#refreshOrders').onclick=loadOrders;
