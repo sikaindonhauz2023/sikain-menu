@@ -20,11 +20,26 @@
   const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.classList.remove('show'),3000); };
   const demoRead = key => { try{return JSON.parse(localStorage.getItem('sikain_'+key)||'null')}catch{return null} };
   const demoWrite = (key,val) => localStorage.setItem('sikain_'+key,JSON.stringify(val));
-  async function loadSettings(){
-    if(db){ const {data,error}=await db.from('store_settings').select('key,value'); if(!error&&data) data.forEach(r=>settings[r.key]=r.value); }
-    else settings={...defaultSettings,...(demoRead('settings')||{})};
-    applySettings();
+  
+async function loadSettings(){
+  if(db){
+    const {data,error}=await db
+      .from('store_settings')
+      .select('key,value');
+
+    if(error){
+      console.error('SIKAIN SETTINGS ERROR:',error);
+      toast('Hindi ma-load ang settings: '+error.message);
+    } else if(data){
+      data.forEach(r=>settings[r.key]=r.value);
+    }
+  } else {
+    settings={...defaultSettings,...(demoRead('settings')||{})};
   }
+
+  applySettings();
+}
+
   function applySettings(){
     document.documentElement.style.setProperty('--brand',settings.theme_color||defaultSettings.theme_color);
     document.documentElement.style.setProperty('--bg',settings.background_color||defaultSettings.background_color);
