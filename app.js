@@ -21,23 +21,39 @@
   const demoRead = key => { try{return JSON.parse(localStorage.getItem('sikain_'+key)||'null')}catch{return null} };
   const demoWrite = (key,val) => localStorage.setItem('sikain_'+key,JSON.stringify(val));
   
-async function loadSettings(){
-  if(db){
-    const {data,error}=await db
-      .from('store_settings')
-      .select('key,value');
 
-    if(error){
-      console.error('SIKAIN SETTINGS ERROR:',error);
-      toast('Hindi ma-load ang settings: '+error.message);
-    } else if(data){
-      data.forEach(r=>settings[r.key]=r.value);
+async function loadSettings(){
+  console.log('SIKAIN: loadSettings started');
+
+  try {
+    if(db){
+      const {data,error}=await db
+        .from('store_settings')
+        .select('key,value');
+
+      if(error) throw error;
+
+      if(data){
+        data.forEach(r=>{
+          settings[r.key]=r.value;
+        });
+      }
+    } else {
+      settings={
+        ...defaultSettings,
+        ...(demoRead('settings')||{})
+      };
     }
-  } else {
-    settings={...defaultSettings,...(demoRead('settings')||{})};
+
+    console.log('SIKAIN: settings loaded',settings);
+
+  } catch(error) {
+    console.error('SIKAIN SETTINGS ERROR:',error);
+    toast('Settings error: '+error.message);
   }
 
   applySettings();
+  console.log('SIKAIN: applySettings finished');
 }
 
   function applySettings(){
