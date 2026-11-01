@@ -6,7 +6,7 @@
   const $$ = (s, root=document) => [...root.querySelectorAll(s)];
   const money = n => new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP'}).format(Number(n)||0);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const defaultSettings = {store_name:'SIKAIN',slogan:'Lokal na Lasang Atin.',store_address:'19 Manalili St., Central Signal Village, Taguig City',facebook_url:'',logo_url:'',theme_color:'#e76f24',background_color:'#fffaf5',font_family:'system',banner_url:'',maps_api_key:'',delivery_base_fee:30,delivery_per_km:10,max_delivery_km:10};
+  const defaultSettings = {store_name:'SIKAIN',slogan:'Lokal na Lasang Atin.',store_address:'19 Manalili St., Central Signal Village, Taguig City',facebook_url:'',logo_url:'',theme_color:'#e76f24',background_color:'#fffaf5',font_family:'system',banner_url:'',maps_api_key:'',delivery_base_fee:30,delivery_per_km:10,max_delivery_km:10,website_open:true};
   const sampleProducts = [
     {id:'demo-1',name:'DonTapa',price:69,category:'Rice Meals',description:'Malinamnam na tapa na may kanin.',image_url:'',available:true},
     {id:'demo-2',name:'DonSisig',price:69,category:'Rice Meals',description:'Sizzling-style sisig, lutong bahay.',image_url:'',available:true},
@@ -35,7 +35,60 @@
     if(settings.logo_url){$('#brandLogo').src=settings.logo_url;$('#brandLogo').hidden=false;$('#brandFallback').hidden=true;}else{$('#brandLogo').hidden=true;$('#brandFallback').hidden=false;}
     if(settings.banner_url){$('.hero').style.backgroundImage=`linear-gradient(90deg,rgba(45,27,16,.78),rgba(45,27,16,.1)),url("${settings.banner_url.replace(/["\\]/g,'')}")`;}else{$('.hero').style.backgroundImage='linear-gradient(90deg,rgba(45,27,16,.82),rgba(45,27,16,.15)),linear-gradient(135deg,#d85f1d,#ffcf8c)';}
     if(settings.facebook_url){$('#facebookLink').href=settings.facebook_url;$('#facebookLink').hidden=false;}else $('#facebookLink').hidden=true;
+    applyWebsiteStatus();
   }
+
+  function ensureWebsiteOrderingNotice(){
+    let notice=$('#websiteOrderingNotice');
+    if(notice) return notice;
+    notice=document.createElement('div');
+    notice.id='websiteOrderingNotice';
+    notice.className='panel';
+    notice.setAttribute('role','status');
+    notice.style.cssText='margin:16px 0;padding:16px;border:1px solid #e76f24;background:#fff1e5;color:#71330f;font-weight:700;text-align:center;';
+    notice.textContent='Pansamantalang sarado ang online ordering. Maaari mong tingnan ang menu at bumalik mamaya.';
+    const menuGrid=$('#menuGrid');
+    if(menuGrid) menuGrid.insertAdjacentElement('beforebegin',notice);
+    else if($('#shopView')) $('#shopView').prepend(notice);
+    return notice;
+  }
+
+  function applyWebsiteStatus(){
+    const isOpen=settings.website_open !== false;
+    const notice=ensureWebsiteOrderingNotice();
+    if(notice) notice.hidden=isOpen;
+    const status=$('#websiteOpenStatus');
+    const toggle=$('#websiteOpenToggle');
+    if(status) status.textContent=isOpen?'OPEN — Tumatanggap ng orders.':'CLOSED — Hindi muna tumatanggap ng orders.';
+    if(toggle){
+      toggle.textContent=isOpen?'CLOSE ORDERING':'OPEN ORDERING';
+      toggle.disabled=false;
+      toggle.setAttribute('aria-pressed',String(!isOpen));
+    }
+    $$('[data-add]').forEach(button=>{
+      button.disabled=!isOpen;
+      button.textContent=isOpen?'+ Add to Cart':'Ordering Closed';
+      button.title=isOpen?'':'Pansamantalang sarado ang online ordering.';
+    });
+  }
+
+  const websiteToggle=$('#websiteOpenToggle');
+  if(websiteToggle){
+    websiteToggle.onclick=async()=>{
+      const nextOpen=settings.website_open===false;
+      websiteToggle.disabled=true;
+      websiteToggle.textContent='Saving...';
+      try{
+        await saveSettings({website_open:nextOpen});
+        applyWebsiteStatus();
+        toast(nextOpen?'Bukas na ulit ang online ordering.':'Sarado na ang online ordering.');
+      }catch(error){
+        applyWebsiteStatus();
+        toast('Hindi na-save ang website status: '+(error.message||String(error)));
+      }
+    };
+  }
+
 async function loadProducts(){
     if(db){
       const {data,error}=await db.from('products').select('*').order('created_at',{ascending:false});
@@ -52,6 +105,7 @@ async function loadProducts(){
     renderCategories();
     renderProducts();
     renderAdminProducts();
+    applyWebsiteStatus();
 
     ensureLoyaltyCustomerUI();
 
@@ -60,8 +114,8 @@ async function loadProducts(){
 }
   function renderCategories(){const cats=['All',...new Set(products.filter(p=>p.available).map(p=>p.category||'Others'))];$('#categories').innerHTML=cats.map(c=>`<button class="chip ${c===category?'active':''}" data-category="${esc(c)}">${esc(c)}</button>`).join('');$$('[data-category]').forEach(b=>b.onclick=()=>{category=b.dataset.category;renderCategories();renderProducts();});}
   function photo(p){return p.image_url||'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="100%" height="100%" fill="#f2e5d9"/><text x="50%" y="48%" text-anchor="middle" font-size="60">🍽️</text><text x="50%" y="68%" text-anchor="middle" font-size="22" fill="#765b49">${String(p.name||'SIKAIN').replace(/[<&>]/g,'')}</text></svg>`);}
-  function renderProducts(){const q=$('#searchMenu').value.trim().toLowerCase();const shown=products.filter(p=>p.available == true && (category==='All'||(p.category||'Others')===category) && `${p.name} ${p.description||''} ${p.category||''}`.toLowerCase().includes(q));$('#menuGrid').innerHTML=shown.length?shown.map(p=>`<article class="food-card"><img loading="lazy" src="${esc(photo(p))}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='${photo({name:'SIKAIN'})}'"><div class="food-content"><h3>${esc(p.name)}</h3><p>${esc(p.description||'Masarap na lutong SIKAIN.')}</p><div class="food-bottom"><span class="price">${money(p.price)}</span><button class="add-btn" data-add="${esc(p.id)}">+ Add to Cart</button></div></div></article>`).join(''):'<div class="empty-state">Walang nahanap na pagkain. Subukan ang ibang search o category.</div>';
-    $$('[data-add]').forEach(b=>b.onclick=()=>{const p=products.find(x=>String(x.id)===b.dataset.add);if(!p)return;const old=cart.find(x=>String(x.id)===String(p.id));if(old)old.qty++;else cart.push({...p,qty:1});renderCart();toast(p.name+' naidagdag sa cart.');});}
+  function renderProducts(){const q=$('#searchMenu').value.trim().toLowerCase();const shown=products.filter(p=>p.available == true && (category==='All'||(p.category||'Others')===category) && `${p.name} ${p.description||''} ${p.category||''}`.toLowerCase().includes(q));$('#menuGrid').innerHTML=shown.length?shown.map(p=>`<article class="food-card"><img loading="lazy" src="${esc(photo(p))}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='${photo({name:'SIKAIN'})}'"><div class="food-content"><h3>${esc(p.name)}</h3><p>${esc(p.description||'Masarap na lutong SIKAIN.')}</p><div class="food-bottom"><span class="price">${money(p.price)}</span><button class="add-btn" data-add="${esc(p.id)}" ${settings.website_open===false?'disabled':''}>${settings.website_open===false?'Ordering Closed':'+ Add to Cart'}</button></div></div></article>`).join(''):'<div class="empty-state">Walang nahanap na pagkain. Subukan ang ibang search o category.</div>';
+    $$('[data-add]').forEach(b=>b.onclick=()=>{if(settings.website_open===false){toast('Sarado muna ang online ordering.');return;}const p=products.find(x=>String(x.id)===b.dataset.add);if(!p)return;const old=cart.find(x=>String(x.id)===String(p.id));if(old)old.qty++;else cart.push({...p,qty:1});renderCart();toast(p.name+' naidagdag sa cart.');});}
   function subtotal(){return cart.reduce((s,p)=>s+(Number(p.price)||0)*p.qty,0)}
   function renderCart(){const count=cart.reduce((s,p)=>s+p.qty,0);$('#cartCount').textContent=count;$('#cartItems').innerHTML=cart.length?cart.map(p=>`<div class="cart-row"><img src="${esc(photo(p))}" alt="${esc(p.name)}"><div><h3>${esc(p.name)}</h3><p>${money(p.price)} bawat isa</p><div class="qty"><button data-qty="${esc(p.id)}" data-delta="-1" aria-label="Bawasan">−</button><strong>${p.qty}</strong><button data-qty="${esc(p.id)}" data-delta="1" aria-label="Dagdagan">+</button></div></div><div class="cart-end"><strong>${money(p.price*p.qty)}</strong><br><button class="remove-btn" data-remove="${esc(p.id)}">Remove</button></div></div>`).join(''):'<div class="empty-state"><h3>Wala pang laman ang cart</h3><p>Pumili muna ng pagkain sa menu.</p><button class="primary-btn" data-goshop>Go to menu</button></div>';
     $$('[data-qty]').forEach(b=>b.onclick=()=>{const p=cart.find(x=>String(x.id)===b.dataset.qty);if(!p)return;p.qty+=Number(b.dataset.delta);if(p.qty<1)cart=cart.filter(x=>x!==p);renderCart();});$$('[data-remove]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>String(x.id)!==b.dataset.remove);renderCart();});const go=$('[data-goshop]');if(go)go.onclick=()=>showView('shop');$('#subtotal').textContent=money(subtotal());$('#deliveryTotal').textContent=money(deliveryFee);$('#grandTotal').textContent=money(subtotal()+deliveryFee);}
@@ -183,7 +237,7 @@ document.getElementById('orderType').addEventListener('change', async function (
 
   $('#checkDistance').onclick=async()=>{const address=$('#customerAddress').value.trim();if(!address){toast('Ilagay muna ang delivery address.');return;}$('#distanceMessage').textContent='Kinukuwenta ang road distance…';$('#checkDistance').disabled=true;try{distanceKm=await getRoadDistance(address);if(distanceKm>Number(settings.max_delivery_km||10)){deliveryFee=0;$('#distanceMessage').textContent=`${distanceKm.toFixed(1)} km ang layo. Lampas ito sa maximum na ${settings.max_delivery_km} km.`;toast('Lampas sa delivery coverage.');}else{deliveryFee=Number(settings.delivery_base_fee||0)+distanceKm*Number(settings.delivery_per_km||0);$('#distanceMessage').textContent=`Tinatayang ${distanceKm.toFixed(1)} km sa kalsada. Delivery fee: ${money(deliveryFee)}.`;}renderCart();}catch(e){$('#distanceMessage').textContent=e.message;toast(e.message);}finally{$('#checkDistance').disabled=false;}};
   function makeCode(){return 'SK-'+Math.random().toString(36).slice(2,8).toUpperCase();}
-  $('#checkoutForm').onsubmit=async e=>{e.preventDefault();if(!cart.length){toast('Magdagdag muna ng pagkain sa cart.');return;}const f=new FormData(e.currentTarget);const orderType=f.get('order_type');const address=String(f.get('address')||'').trim();if(orderType==='delivery'&&!address){toast('Ilagay ang delivery address.');return;}if(orderType==='delivery'&&distanceKm===null){toast('Pindutin muna ang Kalkulahin ang delivery fee.');return;}if(orderType==='delivery'&&distanceKm>Number(settings.max_delivery_km||10)){toast('Lampas sa delivery coverage ang address.');return;}
+  $('#checkoutForm').onsubmit=async e=>{e.preventDefault();if(settings.website_open===false){toast('Sarado muna ang online ordering. Hindi muna makakapag-submit ng order.');return;}if(!cart.length){toast('Magdagdag muna ng pagkain sa cart.');return;}const f=new FormData(e.currentTarget);const orderType=f.get('order_type');const address=String(f.get('address')||'').trim();if(orderType==='delivery'&&!address){toast('Ilagay ang delivery address.');return;}if(orderType==='delivery'&&distanceKm===null){toast('Pindutin muna ang Kalkulahin ang delivery fee.');return;}if(orderType==='delivery'&&distanceKm>Number(settings.max_delivery_km||10)){toast('Lampas sa delivery coverage ang address.');return;}
     const code=makeCode();const payload={order_code:code,customer_name:String(f.get('customer_name')).trim(),phone:String(f.get('phone')).trim(),order_type:orderType,address:orderType==='delivery'?address:'Store pickup',payment_method:String(f.get('payment_method')),notes:String(f.get('notes')||''),items:cart.map(p=>({id:p.id,name:p.name,price:Number(p.price),qty:p.qty,line_total:Number(p.price)*p.qty})),subtotal:Number(subtotal().toFixed(2)),delivery_fee:orderType==='delivery'?Number(deliveryFee.toFixed(2)):0,total:Number((subtotal()+(orderType==='delivery'?deliveryFee:0)).toFixed(2)),distance_km:orderType==='delivery'?distanceKm:null,status:'Pending'};
     const btn=$('#checkoutForm button[type="submit"]');btn.disabled=true;btn.textContent='Isinusumite…';try{if(db){
   const { error } = await db.rpc('place_sikain_order', {
@@ -413,7 +467,7 @@ async function loadMyOrderHistory() {
   $('#trackForm').onsubmit=e=>{e.preventDefault();lookupOrder($('#trackCode').value.trim());};
   $('#adminLogin').onsubmit=async e=>{e.preventDefault();if(!db){$('#loginMessage').textContent='Demo mode: ikonekta muna ang Supabase at gumawa ng admin account. Walang secure admin login sa demo mode.';return;}const f=new FormData(e.currentTarget);const {data,error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error){$('#loginMessage').textContent=error.message;return;}session=data.session;await refreshAdmin();};
   $('#adminLogout').onclick=async()=>{if(db)await db.auth.signOut();session=null;$('#adminContent').hidden=true;$('#adminLogin').hidden=false;$('#adminLogout').hidden=true;toast('Naka-log out na.');};
-  async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();ensureLoyaltyAdminUI();await loadOrders();fillSettingsForms();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
+  async function refreshAdmin(){if(!db){$('#adminLogin').hidden=false;$('#adminContent').hidden=true;return;}const {data}=await db.auth.getSession();session=data.session;if(session){$('#adminLogin').hidden=true;$('#adminContent').hidden=false;$('#adminLogout').hidden=false;await loadProducts();ensureLoyaltyAdminUI();await loadOrders();fillSettingsForms();applyWebsiteStatus();}else{$('#adminLogin').hidden=false;$('#adminContent').hidden=true;$('#adminLogout').hidden=true;}}
   
 
 
