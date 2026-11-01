@@ -132,10 +132,12 @@ async function loadProducts(){
     } else {
       products=demoRead('products')||sampleProducts;
     }
+console.log('MENU DATA:', products);
+console.log('AVAILABLE PRODUCTS:', products.filter(p => p.available == true));
 
-    renderCategories();
-    renderProducts();
-    renderAdminProducts();
+renderCategories();
+renderProducts();
+renderAdminProducts();
     applyWebsiteStatus();
 
     ensureLoyaltyCustomerUI();
