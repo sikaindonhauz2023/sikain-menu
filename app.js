@@ -121,6 +121,7 @@ async function loadSettings(){
   }
 
 async function loadProducts(){
+  console.log('TEST: loadProducts started');
     if(db){
       const {data,error}=await db.from('products').select('*').order('created_at',{ascending:false});
       if(error){
