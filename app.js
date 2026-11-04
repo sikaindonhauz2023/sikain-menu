@@ -548,6 +548,7 @@ async function refreshAdmin(){
 }
 
 
+
 async function loadOrders(){
   const el = $('#ordersList');
   el.innerHTML = '<p>Kinukuha ang orders...</p>';
@@ -558,6 +559,25 @@ async function loadOrders(){
       return;
     }
 
+    // REAL-TIME SUBSCRIPTION (ONE TIME ONLY)
+    if (!sikainOrderChannel) {
+      sikainOrderChannel = db
+        .channel('sikain-admin-orders')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders'
+          },
+          () => {
+            loadOrders();
+          }
+        )
+        .subscribe();
+    }
+
+    // GET ALL ORDERS
     const { data: orders, error } = await db
       .from('orders')
       .select('*')
@@ -570,39 +590,374 @@ async function loadOrders(){
       return;
     }
 
-    el.innerHTML = orders.map(o => `
-      <article class="order-card">
-        <h3>${esc(o.order_code || 'Walang order number')}</h3>
-        <p>${esc(o.customer_name || 'Customer')} · ${esc(o.phone || '')}</p>
-        <p>${esc(o.order_type || '')} · ${esc(o.address || '')}</p>
-        <p>Total: ${money(o.total)}</p>
+    // HELPERS
+    const safe = value => esc(String(value ?? ''));
 
-        <label>Status ng order:</label>
-        <select data-status-for="${esc(o.id)}">
-          <option value="Pending" ${o.status === 'Pending' ? 'selected' : ''}>Pending — Bagong order</option>
-          <option value="Preparing" ${o.status === 'Preparing' ? 'selected' : ''}>Cooking — Niluluto na</option>
-          <option value="Ready" ${o.status === 'Ready' ? 'selected' : ''}>Ready — Handa na</option>
-          <option value="Completed" ${o.status === 'Completed' ? 'selected' : ''}>Delivered — Na-deliver na</option>
-          <option value="Cancelled" ${o.status === 'Cancelled' ? 'selected' : ''}>Cancelled — Kinansela</option>
-        </select>
+    const formatTime = value => {
+      if (!value) return 'Walang oras';
 
-        <button type="button" class="outline-btn" data-update-order="${esc(o.id)}">
-          Update Status
-        </button>
+      const date = new Date(value);
 
-        <button type="button" class="outline-btn" data-delete-order="${esc(o.id)}">
-          Delete Order
-        </button>
-      </article>
-    `).join('');
+      if (isNaN(date.getTime())) return 'Invalid date';
+
+      return date.toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    };
+
+    const getETA = order => {
+      if (order.order_type?.toLowerCase() !== 'delivery') {
+        return 'Pickup order';
+      }
+
+      if (!order.created_at) return 'Not available';
+
+      const date = new Date(order.created_at);
+
+      if (isNaN(date.getTime())) return 'Not available';
+
+      date.setMinutes(date.getMinutes() + 20);
+
+      return date.toLocaleTimeString('en-PH', {
+        timeZone: 'Asia/Manila',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    };
+
+    const statusInfo = status => {
+      const statuses = {
+        Pending: {
+          icon: '🟡',
+          label: 'Pending',
+          color: '#f59e0b'
+        },
+        Preparing: {
+          icon: '🍳',
+          label: 'Preparing',
+          color: '#ea580c'
+        },
+        Ready: {
+          icon: '📦',
+          label: 'Ready for Pickup / Delivery',
+          color: '#16a34a'
+        },
+        Completed: {
+          icon: '🛵',
+          label: 'Delivered',
+          color: '#2563eb'
+        },
+        Cancelled: {
+          icon: '❌',
+          label: 'Cancelled',
+          color: '#dc2626'
+        }
+      };
+
+      return statuses[status] || statuses.Pending;
+    };
+
+    // RENDER ALL ORDER CARDS
+    el.innerHTML = `
+      <div style="margin-bottom:15px;">
+        <h3>SIKAIN ORDERS</h3>
+        <p>Total Orders: ${orders.length}</p>
+      </div>
+
+      ${orders.map(o => {
+
+        let items = o.items || [];
+
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch {
+            items = [];
+          }
+        }
+
+        if (!Array.isArray(items)) items = [];
+
+        const currentStatus = statusInfo(o.status);
+
+        const foodHTML = items.length
+          ? items.map(item => {
+              const qty = Number(item.qty) || 0;
+              const price = Number(item.price) || 0;
+              const lineTotal = Number(item.line_total) || (qty * price);
+
+              return `
+                <div style="
+                  display:flex;
+                  justify-content:space-between;
+                  gap:10px;
+                  padding:8px 0;
+                  border-bottom:1px solid #eee;
+                ">
+                  <div>
+                    <strong>${safe(item.name || 'Food item')}</strong>
+                    <div style="font-size:13px;color:#777;">
+                      ${qty} × ${money(price)}
+                    </div>
+                  </div>
+                  <strong>${money(lineTotal)}</strong>
+                </div>
+              `;
+            }).join('')
+          : '<p>Walang food details.</p>';
+
+        return `
+          <article class="order-card"
+            style="
+              border:1px solid #ddd;
+              border-radius:12px;
+              padding:15px;
+              margin-bottom:15px;
+              background:var(--card-bg, #fff);
+            ">
+
+            <!-- ORDER HEADER -->
+            <div style="
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+              flex-wrap:wrap;
+              gap:10px;
+            ">
+              <h3 style="margin:0;">
+                ORDER #${safe(o.order_code || 'N/A')}
+              </h3>
+
+              <span style="
+                background:${currentStatus.color};
+                color:white;
+                padding:7px 12px;
+                border-radius:20px;
+                font-weight:bold;
+                font-size:13px;
+              ">
+                ${currentStatus.icon} ${currentStatus.label}
+              </span>
+            </div>
+
+            <hr>
+
+            <!-- TIME INFORMATION -->
+            <h4>🕒 ORDER TIME & DELIVERY</h4>
+
+            <p>
+              <strong>Order Date:</strong>
+              ${safe(formatTime(o.created_at))}
+            </p>
+
+            <p>
+              <strong>Estimated Delivery:</strong>
+              ${safe(getETA(o))}
+            </p>
+
+            <!-- CUSTOMER INFORMATION -->
+            <h4>👤 CUSTOMER INFORMATION</h4>
+
+            <p>
+              <strong>Name:</strong>
+              ${safe(o.customer_name || 'Customer')}
+            </p>
+
+            <p>
+              <strong>Contact Number:</strong>
+              ${safe(o.phone || 'Not provided')}
+            </p>
+
+            <p>
+              <strong>Order Type:</strong>
+              ${safe(o.order_type || 'N/A')}
+            </p>
+
+            <p>
+              <strong>Location / Address:</strong>
+              ${safe(o.address || 'No address')}
+            </p>
+
+            ${o.notes ? `
+              <p>
+                <strong>Customer Notes:</strong>
+                ${safe(o.notes)}
+              </p>
+            ` : ''}
+
+            <hr>
+
+            <!-- FOOD ORDERS -->
+            <h4>🍽️ FOOD ORDERS</h4>
+
+            ${foodHTML}
+
+            <hr>
+
+            <!-- PAYMENT DETAILS -->
+            <h4>💰 PAYMENT SUMMARY</h4>
+
+            <div style="display:flex;justify-content:space-between;">
+              <span>Subtotal</span>
+              <strong>${money(o.subtotal)}</strong>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;">
+              <span>Delivery Fee</span>
+              <strong>${money(o.delivery_fee)}</strong>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;">
+              <span>Distance</span>
+              <strong>
+                ${o.distance_km != null
+                  ? safe(o.distance_km) + ' km'
+                  : 'N/A'}
+              </strong>
+            </div>
+
+            <div style="
+              display:flex;
+              justify-content:space-between;
+              margin-top:12px;
+              font-size:20px;
+              font-weight:bold;
+            ">
+              <span>TOTAL</span>
+              <span>${money(o.total)}</span>
+            </div>
+
+            <p>
+              <strong>Payment Method:</strong>
+              ${safe(o.payment_method || 'N/A')}
+            </p>
+
+            <p>
+              <strong>Payment Status:</strong>
+              ${safe(o.payment_status || 'Pending')}
+            </p>
+
+            ${o.payment_reference ? `
+              <p>
+                <strong>Payment Reference:</strong>
+                ${safe(o.payment_reference)}
+              </p>
+            ` : ''}
+
+            ${o.payment_proof_url ? `
+              <p>
+                <a href="${safe(o.payment_proof_url)}"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                  View GCash Payment Proof
+                </a>
+              </p>
+            ` : ''}
+
+            <hr>
+
+            <!-- CUSTOMER TRACKING CODE -->
+            <h4>🔐 CUSTOMER ORDER TRACKING CODE</h4>
+
+            <div style="
+              padding:12px;
+              background:#f3f4f6;
+              border-radius:8px;
+              font-size:20px;
+              font-weight:bold;
+              text-align:center;
+              color:#111;
+            ">
+              ${safe(o.order_code || 'N/A')}
+            </div>
+
+            <hr>
+
+            <!-- STATUS UPDATE -->
+            <h4>📦 UPDATE ORDER STATUS</h4>
+
+            <p>
+              Current Status:
+              <strong>${currentStatus.icon} ${currentStatus.label}</strong>
+            </p>
+
+            <select
+              data-status-for="${safe(o.id)}"
+              style="
+                width:100%;
+                padding:12px;
+                border-radius:8px;
+                margin-bottom:10px;
+              "
+            >
+              <option value="Pending"
+                ${o.status === 'Pending' ? 'selected' : ''}>
+                🟡 Pending — Bagong order
+              </option>
+
+              <option value="Preparing"
+                ${o.status === 'Preparing' ? 'selected' : ''}>
+                🍳 Preparing — Niluluto na
+              </option>
+
+              <option value="Ready"
+                ${o.status === 'Ready' ? 'selected' : ''}>
+                📦 Ready — Handa na
+              </option>
+
+              <option value="Completed"
+                ${o.status === 'Completed' ? 'selected' : ''}>
+                🛵 Delivered — Na-deliver na
+              </option>
+
+              <option value="Cancelled"
+                ${o.status === 'Cancelled' ? 'selected' : ''}>
+                ❌ Cancelled — Kinansela
+              </option>
+            </select>
+
+            <button
+              type="button"
+              class="outline-btn"
+              data-update-order="${safe(o.id)}"
+              style="width:100%;margin-bottom:8px;"
+            >
+              UPDATE ORDER STATUS
+            </button>
+
+            <button
+              type="button"
+              class="outline-btn"
+              data-delete-order="${safe(o.id)}"
+              style="width:100%;"
+            >
+              DELETE ORDER
+            </button>
+
+          </article>
+        `;
+      }).join('')}
+    `;
 
     // UPDATE STATUS
     $$('[data-update-order]').forEach(button => {
       button.onclick = async () => {
+
         const id = button.dataset.updateOrder;
         const card = button.closest('.order-card');
         const select = card.querySelector('[data-status-for]');
         const status = select.value;
+
+        if (!confirm('I-update ang order status sa ' + status + '?')) {
+          return;
+        }
 
         button.disabled = true;
         button.textContent = 'Saving...';
@@ -617,18 +972,21 @@ async function loadOrders(){
           if (error) throw error;
 
           if (!data || data.length === 0) {
-            throw new Error('Walang order na na-update. Suriin ang Supabase UPDATE policy.');
+            throw new Error(
+              'Walang order na na-update. Suriin ang Supabase UPDATE policy.'
+            );
           }
 
-          toast('Matagumpay na na-update: ' + status);
+          toast('Order status updated: ' + status);
+
           await loadOrders();
 
         } catch (err) {
-          toast('Hindi na-update: ' + err.message);
-          console.error('SIKAIN UPDATE STATUS ERROR:', err);
-        } finally {
+          toast('Update failed: ' + err.message);
+          console.error('SIKAIN UPDATE ERROR:', err);
+
           button.disabled = false;
-          button.textContent = 'Update Status';
+          button.textContent = 'UPDATE ORDER STATUS';
         }
       };
     });
@@ -636,9 +994,12 @@ async function loadOrders(){
     // DELETE ORDER
     $$('[data-delete-order]').forEach(button => {
       button.onclick = async () => {
+
         const id = button.dataset.deleteOrder;
 
-        if (!confirm('Sigurado ka bang buburahin ang order na ito? Permanenteng mawawala ito sa records.')) {
+        if (!confirm(
+          'Sigurado ka bang buburahin ang order na ito? Permanenteng mawawala ito sa records.'
+        )) {
           return;
         }
 
@@ -655,26 +1016,34 @@ async function loadOrders(){
           if (error) throw error;
 
           if (!data || data.length === 0) {
-            throw new Error('Hindi nabura. Suriin ang Supabase DELETE policy.');
+            throw new Error(
+              'Hindi nabura. Suriin ang Supabase DELETE policy.'
+            );
           }
 
-          toast('Matagumpay na nabura ang order.');
+          toast('Order successfully deleted.');
+
           await loadOrders();
 
         } catch (err) {
           toast('Delete failed: ' + err.message);
           console.error('SIKAIN DELETE ERROR:', err);
+
           button.disabled = false;
-          button.textContent = 'Delete Order';
+          button.textContent = 'DELETE ORDER';
         }
       };
     });
 
   } catch (err) {
+
     el.innerHTML =
       '<p>Hindi ma-load ang orders: ' + esc(err.message) + '</p>';
+
     console.error('SIKAIN loadOrders error:', err);
   }
+}
+
 }
 // SIKAIN ADMIN REALTIME NOTIFICATION
 
