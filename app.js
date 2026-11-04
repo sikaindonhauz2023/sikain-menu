@@ -528,18 +528,24 @@ async function refreshAdmin(){
 
     ensureLoyaltyAdminUI();
     await loadOrders();
+    startAdminOrderRealtime();
 
     fillSettingsForms();
     applyWebsiteStatus();
 
   }else{
+
+    if(sikainOrderChannel){
+      await db.removeChannel(sikainOrderChannel);
+      sikainOrderChannel = null;
+    }
+
     $('#adminLogin').hidden=false;
     $('#adminContent').hidden=true;
     $('#adminLogout').hidden=true;
-  }
 }
 
-
+}
 
 
 async function loadOrders(){
@@ -670,7 +676,54 @@ async function loadOrders(){
     console.error('SIKAIN loadOrders error:', err);
   }
 }
+// SIKAIN ADMIN REALTIME NOTIFICATION
 
+let sikainOrderChannel = null;
+
+async function startAdminOrderRealtime(){
+
+ if(!db || !session) return;
+
+if('Notification' in window && Notification.permission === 'default'){
+  await Notification.requestPermission();
+}
+
+  if(sikainOrderChannel) return;
+
+  sikainOrderChannel = db
+    .channel('sikain-admin-orders')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'orders'
+      },
+      async (payload) => {
+
+        const order = payload.new;
+
+        console.log('SIKAIN NEW ORDER:', order);
+
+        toast('🔔 BAGONG ORDER! ' + (order.order_code || ''));
+
+        if(
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        ){
+          new Notification('SIKAIN - NEW ORDER!', {
+            body: 'Order #' + (order.order_code || '') +
+              ' mula kay ' + (order.customer_name || 'Customer')
+          });
+        }
+
+        await loadOrders();
+      }
+    )
+    .subscribe((status) => {
+      console.log('SIKAIN ORDER REALTIME:', status);
+    });
+}
 
   $('#refreshOrders').onclick=loadOrders;
   function printReceipt(o){const lines=(o.items||[]).map(i=>`<tr><td>${esc(i.qty)}x ${esc(i.name)}</td><td style="text-align:right">${money(i.line_total??i.price*i.qty)}</td></tr>`).join('');const w=window.open('','_blank','width=360,height=650');if(!w){toast('Payagan ang pop-up para makapag-print.');return;}w.document.write(`<!doctype html><html><head><title>Receipt ${esc(o.order_code)}</title><style>body{font:12px monospace;width:280px;margin:8px auto;color:#000}h2,p{text-align:center;margin:5px 0}hr{border:0;border-top:1px dashed #000;margin:10px 0}table{width:100%;border-collapse:collapse}td{padding:4px 0;vertical-align:top}.total{font-size:15px;font-weight:bold}</style></head><body><h2>${esc(settings.store_name||'SIKAIN')}</h2><p>${esc(settings.slogan||'Lokal na Lasang Atin.')}</p><p>${esc(settings.store_address||'')}</p><hr><p>ORDER RECEIPT</p><p>${esc(o.order_code)}</p><p>${esc(o.created_at?new Date(o.created_at).toLocaleString('en-PH'):new Date().toLocaleString('en-PH'))}</p><hr><p style="text-align:left">Customer: ${esc(o.customer_name)}<br>Phone: ${esc(o.phone)}<br>Type: ${esc(o.order_type)}<br>Address: ${esc(o.address||'')}<br>Payment: ${esc(o.payment_method||'')}</p><hr><table>${lines}</table><hr><table><tr><td>Subtotal</td><td style="text-align:right">${money(o.subtotal)}</td></tr><tr><td>Delivery</td><td style="text-align:right">${money(o.delivery_fee)}</td></tr><tr class="total"><td>TOTAL</td><td style="text-align:right">${money(o.total)}</td></tr></table><hr><p>Salamat sa pag-order!</p><p>${esc(o.notes||'')}</p><script>window.onload=()=>{window.print();};<\/script></body></html>`);w.document.close();}
