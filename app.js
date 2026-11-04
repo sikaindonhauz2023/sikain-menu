@@ -1042,7 +1042,6 @@ async function loadOrders(){
 
     console.error('SIKAIN loadOrders error:', err);
   }
-}
 
 }
 // SIKAIN ADMIN REALTIME NOTIFICATION
