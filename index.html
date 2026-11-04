@@ -29,9 +29,8 @@
 <div id="deliveryMap" style="height:300px;width:100%;border-radius:12px;margin:12px 0;"></div>
 <p class="muted small">Pindutin ang mapa upang piliin ang lokasyon ng delivery.</p>
 <button type="button" id="checkDistance" class="outline-btn">Kalkulahin ang delivery fee</button><p id="distanceMessage" class="muted small">Ilagay ang kumpletong address, pagkatapos kalkulahin ang delivery fee.</p></div><label>Payment method
-  <select name="payment_method" required>
-    <option value="Cash Payment">Cash on Delivery</option>
-    <option value="Cash Payment">Cash on Pickup</option>
+  <select name="payment_method" id="paymentMethod" required>
+    <option value="Cash on Pickup">Cash on Pickup</option>
     <option value="GCash">GCash (i-confirm sa store)</option>
   </select>
 </label><label>Order notes (optional)<textarea name="notes" rows="2" placeholder="Hal. no spicy, extra sauce"></textarea></label><div class="bill"><div><span>Subtotal</span><strong id="subtotal">₱0.00</strong></div><div><span>Delivery fee</span><strong id="deliveryTotal">₱0.00</strong></div><div class="grand"><span>Total</span><strong id="grandTotal">₱0.00</strong></div></div><button class="primary-btn full" type="submit">Place Order</button><p class="small muted">Hindi kailangan gumawa ng account para umorder.</p></form></div></section>
