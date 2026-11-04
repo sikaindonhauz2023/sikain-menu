@@ -155,7 +155,7 @@ renderAdminProducts();
     $$('[data-qty]').forEach(b=>b.onclick=()=>{const p=cart.find(x=>String(x.id)===b.dataset.qty);if(!p)return;p.qty+=Number(b.dataset.delta);if(p.qty<1)cart=cart.filter(x=>x!==p);renderCart();});$$('[data-remove]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>String(x.id)!==b.dataset.remove);renderCart();});const go=$('[data-goshop]');if(go)go.onclick=()=>showView('shop');$('#subtotal').textContent=money(subtotal());$('#deliveryTotal').textContent=money(deliveryFee);$('#grandTotal').textContent=money(subtotal()+deliveryFee);}
   function showView(view){$$('.view').forEach(v=>v.hidden=true);const map={shop:'#shopView',cart:'#cartView',track:'#trackView',admin:'#adminView'};$(map[view]||map.shop).hidden=false;$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='cart')renderCart();if(view==='admin')refreshAdmin();window.scrollTo({top:0,behavior:'smooth'});}
   $$('[data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));$('#adminOpen').onclick=()=>showView('admin');$('#searchMenu').addEventListener('input',renderProducts);
- $('#orderType').onchange=()=>{
+$('#orderType').onchange=()=>{
   const delivery=$('#orderType').value==='delivery';
 
   $('#deliveryFields').hidden=!delivery;
@@ -171,17 +171,19 @@ renderAdminProducts();
 
   if(delivery){
     payment.innerHTML=`
-      <option value="Cash Payment">Cash on Delivery</option>
+      <option value="Cash on Delivery">Cash on Delivery</option>
       <option value="GCash">GCash (i-confirm sa store)</option>
     `;
   }else{
     payment.innerHTML=`
-      <option value="Cash Payment">Cash on Pickup</option>
+      <option value="Cash on Pickup">Cash on Pickup</option>
       <option value="GCash">GCash (i-confirm sa store)</option>
     `;
   }
 
-  payment.value=previousPayment==='GCash'?'GCash':'Cash Payment';
+  payment.value=previousPayment==='GCash'
+    ?'GCash'
+    :(delivery?'Cash on Delivery':'Cash on Pickup');
 
   renderCart();
 };
