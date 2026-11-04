@@ -560,23 +560,7 @@ async function loadOrders(){
       return;
     }
 
-    // REAL-TIME SUBSCRIPTION (ONE TIME ONLY)
-    if (!sikainOrderChannel) {
-      sikainOrderChannel = db
-        .channel('sikain-admin-orders')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'orders'
-          },
-          () => {
-            loadOrders();
-          }
-        )
-        .subscribe();
-    }
+  
 
     // GET ALL ORDERS
     const { data: orders, error } = await db
@@ -880,6 +864,22 @@ async function loadOrders(){
             </div>
 
             <hr>
+<!-- PRINT RECEIPT -->
+<button
+  type="button"
+  class="outline-btn"
+  data-print-order="${safe(o.id)}"
+  style="
+    width:100%;
+    margin-bottom:12px;
+    background:#ea580c;
+    color:white;
+    padding:13px;
+    font-weight:bold;
+  "
+>
+  🖨️ PRINT RECEIPT
+</button>
 
             <!-- STATUS UPDATE -->
             <h4>📦 UPDATE ORDER STATUS</h4>
@@ -946,7 +946,22 @@ async function loadOrders(){
         `;
       }).join('')}
     `;
+// PRINT RECEIPT BUTTON
+$$('[data-print-order]').forEach(button => {
+  button.onclick = () => {
 
+    const order = orders.find(
+      o => String(o.id) === String(button.dataset.printOrder)
+    );
+
+    if (!order) {
+      toast('Hindi makita ang order.');
+      return;
+    }
+
+    printReceipt(order);
+  };
+});
     // UPDATE STATUS
     $$('[data-update-order]').forEach(button => {
       button.onclick = async () => {
@@ -1096,8 +1111,236 @@ async function startAdminOrderRealtime(){
     });
 }
 
-  $('#refreshOrders').onclick=loadOrders;
-  function printReceipt(o){const lines=(o.items||[]).map(i=>`<tr><td>${esc(i.qty)}x ${esc(i.name)}</td><td style="text-align:right">${money(i.line_total??i.price*i.qty)}</td></tr>`).join('');const w=window.open('','_blank','width=360,height=650');if(!w){toast('Payagan ang pop-up para makapag-print.');return;}w.document.write(`<!doctype html><html><head><title>Receipt ${esc(o.order_code)}</title><style>body{font:12px monospace;width:280px;margin:8px auto;color:#000}h2,p{text-align:center;margin:5px 0}hr{border:0;border-top:1px dashed #000;margin:10px 0}table{width:100%;border-collapse:collapse}td{padding:4px 0;vertical-align:top}.total{font-size:15px;font-weight:bold}</style></head><body><h2>${esc(settings.store_name||'SIKAIN')}</h2><p>${esc(settings.slogan||'Lokal na Lasang Atin.')}</p><p>${esc(settings.store_address||'')}</p><hr><p>ORDER RECEIPT</p><p>${esc(o.order_code)}</p><p>${esc(o.created_at?new Date(o.created_at).toLocaleString('en-PH'):new Date().toLocaleString('en-PH'))}</p><hr><p style="text-align:left">Customer: ${esc(o.customer_name)}<br>Phone: ${esc(o.phone)}<br>Type: ${esc(o.order_type)}<br>Address: ${esc(o.address||'')}<br>Payment: ${esc(o.payment_method||'')}</p><hr><table>${lines}</table><hr><table><tr><td>Subtotal</td><td style="text-align:right">${money(o.subtotal)}</td></tr><tr><td>Delivery</td><td style="text-align:right">${money(o.delivery_fee)}</td></tr><tr class="total"><td>TOTAL</td><td style="text-align:right">${money(o.total)}</td></tr></table><hr><p>Salamat sa pag-order!</p><p>${esc(o.notes||'')}</p><script>window.onload=()=>{window.print();};<\/script></body></html>`);w.document.close();}
+const refreshOrdersButton = $('#refreshOrders');
+
+if (refreshOrdersButton) {
+  refreshOrdersButton.onclick = loadOrders;
+}
+ 
+function printReceipt(o) {
+
+  let items = o.items || [];
+
+  if (typeof items === 'string') {
+    try {
+      items = JSON.parse(items);
+    } catch {
+      items = [];
+    }
+  }
+
+  if (!Array.isArray(items)) items = [];
+
+  const lines = items.map(i => `
+    <tr>
+      <td>
+        ${esc(i.qty)}x ${esc(i.name)}
+        <small>${money(i.price)} each</small>
+      </td>
+      <td class="right">
+        ${money(i.line_total ?? (i.price * i.qty))}
+      </td>
+    </tr>
+  `).join('');
+
+  const orderDate = o.created_at
+    ? new Date(o.created_at).toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila'
+      })
+    : new Date().toLocaleString('en-PH');
+
+  const makeCopy = (copyName) => `
+    <section class="receipt">
+
+      <h2>${esc(settings.store_name || 'SIKAIN')}</h2>
+      <p>${esc(settings.slogan || 'Lokal na Lasang Atin.')}</p>
+      <p>${esc(settings.store_address || '19 Manalili St., Central Signal Village, Taguig City')}</p>
+
+      <hr>
+
+      <h3>${copyName}</h3>
+      <h2>ORDER #${esc(o.order_code || 'N/A')}</h2>
+      <p>${esc(orderDate)}</p>
+
+      <hr>
+
+      <p class="left">
+        <strong>Customer:</strong> ${esc(o.customer_name || 'Customer')}<br>
+        <strong>Phone:</strong> ${esc(o.phone || 'N/A')}<br>
+        <strong>Type:</strong> ${esc(o.order_type || 'N/A')}<br>
+        <strong>Address:</strong> ${esc(o.address || 'Pickup / No address')}<br>
+        <strong>Payment:</strong> ${esc(o.payment_method || 'N/A')}<br>
+        <strong>Status:</strong> ${esc(o.status || 'Pending')}
+      </p>
+
+      <hr>
+
+      <table>
+        ${lines}
+      </table>
+
+      <hr>
+
+      <table>
+        <tr>
+          <td>Subtotal</td>
+          <td class="right">${money(o.subtotal)}</td>
+        </tr>
+        <tr>
+          <td>Delivery Fee</td>
+          <td class="right">${money(o.delivery_fee)}</td>
+        </tr>
+        <tr>
+          <td>Distance</td>
+          <td class="right">
+            ${o.distance_km != null ? esc(o.distance_km) + ' km' : 'N/A'}
+          </td>
+        </tr>
+        <tr class="total">
+          <td>TOTAL</td>
+          <td class="right">${money(o.total)}</td>
+        </tr>
+      </table>
+
+      <hr>
+
+      <p>
+        <strong>ORDER TRACKING CODE</strong>
+      </p>
+      <h2>${esc(o.order_code || 'N/A')}</h2>
+
+      ${o.notes ? `<p class="left">Notes: ${esc(o.notes)}</p>` : ''}
+
+      <hr>
+
+      <p>Salamat sa pag-order!</p>
+      <p>SIKAIN - Lokal na Lasang Atin.</p>
+
+    </section>
+  `;
+
+  const w = window.open('', '_blank', 'width=400,height=750');
+
+  if (!w) {
+    toast('Payagan ang pop-up para makapag-print.');
+    return;
+  }
+
+  w.document.write(`
+    <!doctype html>
+    <html>
+    <head>
+      <title>SIKAIN Receipt ${esc(o.order_code)}</title>
+
+      <style>
+        @page {
+          margin: 2mm;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          font-family: monospace;
+          font-size: 12px;
+          width: 100%;
+          max-width: 72mm;
+          margin: 0 auto;
+          color: #000;
+        }
+
+        .receipt {
+          width: 100%;
+          padding: 4px 0 12px;
+          page-break-inside: avoid;
+        }
+
+        h2, h3, p {
+          text-align: center;
+          margin: 5px 0;
+          overflow-wrap: anywhere;
+        }
+
+        h2 {
+          font-size: 17px;
+        }
+
+        h3 {
+          font-size: 14px;
+        }
+
+        .left {
+          text-align: left;
+          line-height: 1.6;
+        }
+
+        hr {
+          border: 0;
+          border-top: 1px dashed #000;
+          margin: 10px 0;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        td {
+          padding: 5px 0;
+          vertical-align: top;
+          overflow-wrap: anywhere;
+        }
+
+        td small {
+          display: block;
+          font-size: 10px;
+        }
+
+        .right {
+          text-align: right;
+          white-space: nowrap;
+        }
+
+        .total {
+          font-size: 15px;
+          font-weight: bold;
+        }
+
+        .copy-separator {
+          border-top: 2px dashed #000;
+          margin: 15px 0;
+        }
+
+        @media print {
+          body {
+            max-width: 72mm;
+          }
+        }
+      </style>
+    </head>
+
+    <body>
+
+      ${makeCopy('CUSTOMER COPY')}
+
+      <div class="copy-separator"></div>
+
+      ${makeCopy('ADMIN / STORE COPY')}
+
+      <script>
+        window.onload = () => {
+          window.print();
+        };
+      <\/script>
+
+    </body>
+    </html>
+  `);
+
+  w.document.close();
+}
+
   function renderAdminProducts(){const el=$('#adminProducts');if(!el)return;el.innerHTML=products.length?products.map(p=>`<div class="admin-product"><img src="${esc(photo(p))}" alt=""><div><h3>${esc(p.name)} ${p.available?'':'(Unavailable)'}</h3><p>${esc(p.category||'Others')} · ${money(p.price)}</p><p>${esc(p.description||'')}</p></div><div class="button-row"><button class="outline-btn" data-edit-product="${esc(p.id)}">Edit</button><button class="outline-btn" data-delete-product="${esc(p.id)}">Delete</button></div></div>`).join(''):'<p class="muted">Wala pang menu items.</p>';
     $$('[data-edit-product]').forEach(b=>b.onclick=()=>{const p=products.find(x=>String(x.id)===b.dataset.editProduct);if(!p)return;const f=$('#productForm');f.hidden=false;$('#productFormTitle').textContent='Edit food';ensureStockField();
 for(const k of ['id','name','price','category','image_url','description'])f.elements[k].value=p[k]??'';
