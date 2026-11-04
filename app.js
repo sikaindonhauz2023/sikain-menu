@@ -548,7 +548,8 @@ async function refreshAdmin(){
 }
 
 
-
+let sikainOrderChannel = null;
+  
 async function loadOrders(){
   const el = $('#ordersList');
   el.innerHTML = '<p>Kinukuha ang orders...</p>';
@@ -1043,46 +1044,48 @@ async function loadOrders(){
     console.error('SIKAIN loadOrders error:', err);
   }
 
-}
-// SIKAIN ADMIN REALTIME NOTIFICATION
-
-let sikainOrderChannel = null;
-
+} 
 async function startAdminOrderRealtime(){
 
- if(!db || !session) return;
+  if (!db || !session) return;
 
-if('Notification' in window && Notification.permission === 'default'){
-  await Notification.requestPermission();
-}
+  if (
+    'Notification' in window &&
+    Notification.permission === 'default'
+  ) {
+    await Notification.requestPermission();
+  }
 
-  if(sikainOrderChannel) return;
+  if (sikainOrderChannel) return;
 
   sikainOrderChannel = db
     .channel('sikain-admin-orders')
     .on(
       'postgres_changes',
       {
-        event: 'INSERT',
+        event: '*',
         schema: 'public',
         table: 'orders'
       },
       async (payload) => {
 
-        const order = payload.new;
+        console.log('SIKAIN ORDER UPDATE:', payload);
 
-        console.log('SIKAIN NEW ORDER:', order);
+        if (payload.eventType === 'INSERT') {
 
-        toast('🔔 BAGONG ORDER! ' + (order.order_code || ''));
+          const order = payload.new;
 
-        if(
-          'Notification' in window &&
-          Notification.permission === 'granted'
-        ){
-          new Notification('SIKAIN - NEW ORDER!', {
-            body: 'Order #' + (order.order_code || '') +
-              ' mula kay ' + (order.customer_name || 'Customer')
-          });
+          toast('🔔 BAGONG ORDER! ' + (order.order_code || ''));
+
+          if (
+            'Notification' in window &&
+            Notification.permission === 'granted'
+          ) {
+            new Notification('SIKAIN - NEW ORDER!', {
+              body: 'Order #' + (order.order_code || '') +
+                ' mula kay ' + (order.customer_name || 'Customer')
+            });
+          }
         }
 
         await loadOrders();
