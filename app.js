@@ -786,6 +786,49 @@ $('#adminChatForm')?.addEventListener('submit', async event => {
     button.disabled = false;
   }
 });
+  // CLOSE CUSTOMER CONVERSATION
+$('#adminChatClose')?.addEventListener('click', async () => {
+
+  if (!activeAdminChatId) {
+    toast('Pumili muna ng conversation.');
+    return;
+  }
+
+  if (!confirm('Sigurado ka bang isasara ang conversation na ito?')) {
+    return;
+  }
+
+  const button = $('#adminChatClose');
+  button.disabled = true;
+
+  try {
+    const { error } = await db.rpc('sikain_admin_set_chat_status', {
+      p_chat_id: activeAdminChatId,
+      p_status: 'closed'
+    });
+
+    if (error) throw error;
+
+    activeAdminChatId = null;
+
+    $('#chatConversationHeader').innerHTML =
+      '<h3>Conversation Closed</h3>';
+
+    $('#adminChatMessages').innerHTML =
+      '<p class="muted">Sarado na ang conversation na ito.</p>';
+
+    await loadAdminChats();
+
+    toast('Conversation successfully closed.');
+
+  } catch (error) {
+    console.error('Close chat error:', error);
+    toast('Hindi naisara: ' + error.message);
+
+  } finally {
+    button.disabled = false;
+  }
+});
 // DAPAT DITO MULI MAGSIMULA ANG LOAD ORDERS
 async function loadOrders(){
   const el = $('#ordersList');
