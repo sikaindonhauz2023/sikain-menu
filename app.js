@@ -700,6 +700,40 @@ $('#chatConversationList')?.addEventListener('click', event => {
 
   openAdminChat(button.dataset.chatId);
 });
+  // MESSAGE CUSTOMER FROM ORDER
+$('#ordersList')?.addEventListener('click', async event => {
+  const button = event.target.closest('[data-message-order]');
+  if (!button) return;
+
+  const orderCode = button.dataset.messageOrder;
+
+  await loadAdminChats();
+
+  const { data, error } = await db.rpc('sikain_admin_list_chats');
+
+  if (error) {
+    toast('Hindi mahanap ang customer chat.');
+    console.error(error);
+    return;
+  }
+
+  const chats = Array.isArray(data) ? data : [];
+
+  const chat = chats.find(c =>
+    String(c.order_code || '').trim() === String(orderCode).trim()
+  );
+
+  if (!chat) {
+    toast('Wala pang chat ang customer para sa order na ito.');
+    return;
+  }
+
+  openAdminChat(chat.id);
+
+  // Buksan ang Chat Inbox tab
+  const chatTab = document.querySelector('[data-admin-tab="chat"]');
+  if (chatTab) chatTab.click();
+});
 // ADMIN SEND MESSAGE
 $('#adminChatForm')?.addEventListener('submit', async event => {
   event.preventDefault();
