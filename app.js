@@ -700,20 +700,31 @@ $('#chatConversationList')?.addEventListener('click', event => {
 
   openAdminChat(button.dataset.chatId);
 });
-  // MESSAGE CUSTOMER FROM ORDER
+
+
+// MESSAGE CUSTOMER FROM ORDER
 $('#ordersList')?.addEventListener('click', async event => {
   const button = event.target.closest('[data-message-order]');
   if (!button) return;
 
+  event.preventDefault();
+  event.stopPropagation();
+
   const orderCode = button.dataset.messageOrder;
 
-  await loadAdminChats();
+  console.log('MESSAGE CUSTOMER CLICKED:', orderCode);
+  toast('Message button clicked: ' + orderCode);
+
+  if (!db) {
+    toast('Walang Supabase connection.');
+    return;
+  }
 
   const { data, error } = await db.rpc('sikain_admin_list_chats');
 
   if (error) {
-    toast('Hindi mahanap ang customer chat.');
-    console.error(error);
+    console.error('Chat list error:', error);
+    toast('Chat error: ' + error.message);
     return;
   }
 
@@ -724,16 +735,17 @@ $('#ordersList')?.addEventListener('click', async event => {
   );
 
   if (!chat) {
-    toast('Wala pang chat ang customer para sa order na ito.');
+    toast('Wala pang chat na naka-link sa order na ito.');
     return;
   }
 
-  openAdminChat(chat.id);
-
-  // Buksan ang Chat Inbox tab
   const chatTab = document.querySelector('[data-admin-tab="chat"]');
   if (chatTab) chatTab.click();
+
+  await openAdminChat(chat.id);
 });
+
+
 // ADMIN SEND MESSAGE
 $('#adminChatForm')?.addEventListener('submit', async event => {
   event.preventDefault();
