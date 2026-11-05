@@ -662,20 +662,28 @@ async function openAdminChat(chatId) {
     if (chatError) throw chatError;
 
     const chat = (Array.isArray(chats) ? chats : [])
-      .find(c => c.id === chatId);
+.find(c => c.id === chatId);
 
-    if (!chat) throw new Error('Conversation not found.');
+if (!chat) throw new Error('Conversation not found.');
 
-    const isClosed = chat.status === 'closed';
+const isClosed = String(chat.status || '').toLowerCase() === 'closed';
 
-    if (deleteButton) deleteButton.hidden = !isClosed;
-    if (closeButton) closeButton.hidden = isClosed;
+console.log('CHAT STATUS:', chat.status);
+console.log('IS CLOSED:', isClosed);
 
-    header.innerHTML = `
-      <h3>${esc(chat.customer_name)}</h3>
-      <small>Status: ${isClosed ? 'Closed' : 'Open'}</small>
-    `;
+if (deleteButton) {
+  deleteButton.hidden = !isClosed;
+  deleteButton.style.display = isClosed ? 'block' : 'none';
+}
 
+if (closeButton) {
+  closeButton.hidden = isClosed;
+}
+
+header.innerHTML = `
+  <h3>${esc(chat.customer_name)}</h3>
+  <small>Status: ${isClosed ? 'Closed' : 'Open'}</small>
+`;
     // Kunin ang messages
     const { data, error } = await db.rpc(
       'sikain_admin_get_messages',
