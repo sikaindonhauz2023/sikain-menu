@@ -2542,6 +2542,206 @@ async function loadLoyaltyAdmin() {
 
 
 (async function initCustomerPage() {
+  
+// =====================================
+// SIKAIN CUSTOMER CHAT
+// =====================================
+
+let customerChatId = null;
+let customerChatToken = null;
+let customerChatTimer = null;
+let customerChatLoading = false;
+
+const chatTokenKey = 'sikain_customer_chat_token';
+const chatNameKey = 'sikain_customer_chat_name';
+const chatOrderKey = 'sikain_customer_chat_order';
+
+const chatToggle = $('#customerChatToggle');
+const chatHide = $('#customerChatHide');
+const chatWindow = $('#customerChatWindow');
+const chatStartBtn = $('#customerChatStartBtn');
+const chatStartPanel = $('#customerChatStart');
+const chatConversation = $('#customerChatConversation');
+const chatMessages = $('#customerChatMessages');
+const chatForm = $('#customerChatForm');
+const chatInput = $('#customerChatInput');
+
+function customerChatShow() {
+  if (chatWindow) chatWindow.hidden = false;
+}
+
+function customerChatHideWindow() {
+  if (chatWindow) chatWindow.hidden = true;
+}
+
+function customerChatRender(messages) {
+  if (!chatMessages) return;
+
+  if (!Array.isArray(messages) || !messages.length) {
+    chatMessages.innerHTML =
+      '<p class="muted">Wala pang messages. Maaari ka nang mag-message sa SIKAIN.</p>';
+    return;
+  }
+
+  chatMessages.innerHTML = messages.map(m => `
+    <div style="
+      display:flex;
+      justify-content:${m.sender === 'customer' ? 'flex-end' : 'flex-start'};
+      margin:8px 0;
+    ">
+      <div style="
+        max-width:85%;
+        padding:9px 12px;
+        border-radius:12px;
+        background:${m.sender === 'customer' ? 'var(--brand)' : '#eeeeee'};
+        color:${m.sender === 'customer' ? '#fff' : '#222'};
+        overflow-wrap:anywhere;
+      ">
+        <small style="display:block;font-weight:bold;margin-bottom:4px;">
+          ${m.sender === 'customer' ? 'You' : 'SIKAIN Support'}
+        </small>
+        ${esc(m.message)}
+      </div>
+    </div>
+  `).join('');
+
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function customerChatRefresh() {
+  if (!customerChatId || !customerChatToken || customerChatLoading) return;
+
+  customerChatLoading = true;
+
+  try {
+    const { data, error } = await db.rpc('sikain_chat_get_messages', {
+      p_chat_id: customerChatId,
+      p_customer_token: customerChatToken
+    });
+
+    if (error) throw error;
+
+    customerChatRender(data);
+  } catch (error) {
+    console.error('SIKAIN CHAT LOAD ERROR:', error);
+  } finally {
+    customerChatLoading = false;
+  }
+}
+
+async function customerChatStart() {
+  if (!db) {
+    alert('Walang koneksyon sa SIKAIN server.');
+    return;
+  }
+
+  const name = $('#customerChatName')?.value.trim()
+    || localStorage.getItem(chatNameKey) || '';
+
+  const orderCode = $('#customerChatOrderCode')?.value.trim()
+    || localStorage.getItem(chatOrderKey) || '';
+
+  if (!name) {
+    alert('Pakilagay ang iyong pangalan.');
+    return;
+  }
+
+  if (chatStartBtn) chatStartBtn.disabled = true;
+
+  try {
+    customerChatToken =
+      localStorage.getItem(chatTokenKey) || crypto.randomUUID();
+
+    const { data, error } = await db.rpc('sikain_chat_start', {
+      p_customer_name: name,
+      p_customer_token: customerChatToken,
+      p_order_code: orderCode || null
+    });
+
+    if (error) throw error;
+
+    customerChatId = data.id;
+
+    localStorage.setItem(chatTokenKey, customerChatToken);
+    localStorage.setItem(chatNameKey, name);
+    localStorage.setItem(chatOrderKey, orderCode);
+
+    chatStartPanel.hidden = true;
+    chatConversation.hidden = false;
+
+    await customerChatRefresh();
+
+    if (customerChatTimer) clearInterval(customerChatTimer);
+    customerChatTimer = setInterval(customerChatRefresh, 3000);
+
+  } catch (error) {
+    console.error('SIKAIN CHAT START ERROR:', error);
+    alert('Hindi masimulan ang chat: ' + error.message);
+  } finally {
+    if (chatStartBtn) chatStartBtn.disabled = false;
+  }
+}
+
+if (chatToggle) {
+  chatToggle.onclick = () => {
+    if (chatWindow.hidden) customerChatShow();
+    else customerChatHideWindow();
+  };
+}
+
+if (chatHide) {
+  chatHide.onclick = customerChatHideWindow;
+}
+
+if (chatStartBtn) {
+  chatStartBtn.onclick = customerChatStart;
+}
+
+if (chatForm) {
+  chatForm.onsubmit = async event => {
+    event.preventDefault();
+
+    const message = chatInput.value.trim();
+    if (!message || !customerChatId || !customerChatToken) return;
+
+    chatInput.disabled = true;
+
+    try {
+      const { error } = await db.rpc('sikain_chat_send', {
+        p_chat_id: customerChatId,
+        p_customer_token: customerChatToken,
+        p_message: message
+      });
+
+      if (error) throw error;
+
+      chatInput.value = '';
+      await customerChatRefresh();
+
+    } catch (error) {
+      console.error('SIKAIN CHAT SEND ERROR:', error);
+      alert('Hindi naipadala ang message: ' + error.message);
+    } finally {
+      chatInput.disabled = false;
+      chatInput.focus();
+    }
+  };
+}
+
+// Ibalik ang dating conversation kapag bumalik ang customer.
+(async function restoreCustomerChat() {
+  const savedToken = localStorage.getItem(chatTokenKey);
+  const savedName = localStorage.getItem(chatNameKey);
+
+  if (!savedToken || !savedName || !db) return;
+
+  $('#customerChatName').value = savedName;
+  $('#customerChatOrderCode').value =
+    localStorage.getItem(chatOrderKey) || '';
+
+  await customerChatStart();
+})();
+
   console.log('SIKAIN: Starting customer page...');
 
   try {
