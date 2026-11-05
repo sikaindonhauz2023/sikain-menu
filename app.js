@@ -828,32 +828,25 @@ $('#adminChatClose')?.addEventListener('click', async () => {
   button.disabled = true;
 
   try {
-    const { error } = await db.rpc('sikain_admin_set_chat_status', {
-      p_chat_id: activeAdminChatId,
-      p_status: 'closed'
-    });
+  const { error } = await db.rpc('sikain_admin_set_chat_status', {
+    p_chat_id: activeAdminChatId,
+    p_status: 'closed'
+  });
 
-    if (error) throw error;
+  if (error) throw error;
 
-    activeAdminChatId = null;
+  await loadAdminChats();
+  await openAdminChat(activeAdminChatId);
 
-    $('#chatConversationHeader').innerHTML =
-      '<h3>Conversation Closed</h3>';
+  toast('Conversation successfully closed.');
 
-    $('#adminChatMessages').innerHTML =
-      '<p class="muted">Sarado na ang conversation na ito.</p>';
+} catch (error) {
+  console.error('Close chat error:', error);
+  toast('Hindi naisara: ' + error.message);
 
-    await loadAdminChats();
-
-    toast('Conversation successfully closed.');
-
-  } catch (error) {
-    console.error('Close chat error:', error);
-    toast('Hindi naisara: ' + error.message);
-
-  } finally {
-    button.disabled = false;
-  }
+} finally {
+  button.disabled = false;
+}
 });
   console.log('SIKAIN CLOSE BUTTON EVENT READY');
 console.log('CLOSE BUTTON:', $('#adminChatClose'));
