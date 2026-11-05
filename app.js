@@ -564,8 +564,9 @@ async function refreshAdmin(){
     await loadProducts();
 
     ensureLoyaltyAdminUI();
-    await loadOrders();
-    startAdminOrderRealtime();
+   await loadOrders();
+await loadAdminChats();
+startAdminOrderRealtime();
 
     fillSettingsForms();
     applyWebsiteStatus();
@@ -584,9 +585,162 @@ async function refreshAdmin(){
 
 }
 
-
 let sikainOrderChannel = null;
-  
+
+
+// CHAT INBOX FUNCTION
+async function loadAdminChats() {
+  const el = $('#chatConversationList');
+
+  if (!el || !db) return;
+
+  el.innerHTML = '<p class="muted">Loading conversations...</p>';
+
+  try {
+    const { data, error } = await db.rpc('sikain_admin_list_chats');
+
+    if (error) throw error;
+
+    const chats = Array.isArray(data) ? data : [];
+
+    const unread = chats.filter(c => c.status === 'open').length;
+    const badge = $('#chatUnreadCount');
+
+    if (badge) badge.textContent = unread;
+
+    if (!chats.length) {
+      el.innerHTML = '<p class="muted">Wala pang customer conversations.</p>';
+      return;
+    }
+
+    el.innerHTML = chats.map(chat => `
+      <button
+        type="button"
+        class="outline-btn"
+        data-chat-id="${esc(chat.id)}"
+        style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px;"
+      >
+        <strong>${esc(chat.customer_name)}</strong>
+        <br>
+        <small>Order: ${esc(chat.order_code || 'Walang order number')}</small>
+        <br>
+        <small>${esc(chat.last_message || 'Wala pang message')}</small>
+        <br>
+        <small>Status: ${esc(chat.status)}</small>
+      </button>
+    `).join('');
+
+  } catch (error) {
+    console.error('Admin chat loading error:', error);
+    el.innerHTML = '<p class="muted">Hindi ma-load ang conversations.</p>';
+  }
+}
+// SELECTED CHAT
+let activeAdminChatId = null;
+
+
+// OPEN CUSTOMER CONVERSATION
+async function openAdminChat(chatId) {
+  activeAdminChatId = chatId;
+
+  const header = $('#chatConversationHeader');
+  const messages = $('#adminChatMessages');
+
+  header.innerHTML = '<h3>Customer Conversation</h3>';
+  messages.innerHTML = '<p>Loading messages...</p>';
+
+  try {
+    const { data, error } = await db.rpc(
+      'sikain_admin_get_messages',
+      { p_chat_id: chatId }
+    );
+
+    if (error) throw error;
+
+    const chatMessages = Array.isArray(data) ? data : [];
+
+    if (!chatMessages.length) {
+      messages.innerHTML = '<p>Wala pang messages.</p>';
+      return;
+    }
+
+    messages.innerHTML = chatMessages.map(msg => `
+      <div style="
+        text-align:${msg.sender === 'admin' ? 'right' : 'left'};
+        margin-bottom:12px;
+      ">
+        <div style="
+          display:inline-block;
+          max-width:85%;
+          padding:10px;
+          border-radius:12px;
+          background:${msg.sender === 'admin' ? '#e76f24' : '#eee'};
+          color:${msg.sender === 'admin' ? 'white' : '#222'};
+          text-align:left;
+        ">
+          <small><strong>${msg.sender === 'admin' ? 'SIKAIN' : 'Customer'}</strong></small>
+          <div>${esc(msg.message)}</div>
+        </div>
+      </div>
+    `).join('');
+
+    messages.scrollTop = messages.scrollHeight;
+
+  } catch (error) {
+    console.error('Open chat error:', error);
+    messages.innerHTML = '<p>Hindi ma-load ang messages.</p>';
+  }
+}
+
+
+// CLICK CONVERSATION
+$('#chatConversationList')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-chat-id]');
+  if (!button) return;
+
+  openAdminChat(button.dataset.chatId);
+});
+// ADMIN SEND MESSAGE
+$('#adminChatForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+
+  if (!activeAdminChatId) {
+    toast('Pumili muna ng customer conversation.');
+    return;
+  }
+
+  const input = $('#adminChatInput');
+  const message = input.value.trim();
+
+  if (!message) return;
+
+  const button = $('#adminChatForm button[type="submit"]');
+  button.disabled = true;
+
+  try {
+    const { error } = await db.rpc('sikain_admin_reply', {
+      p_chat_id: activeAdminChatId,
+      p_message: message
+    });
+
+    if (error) throw error;
+
+    input.value = '';
+
+    await openAdminChat(activeAdminChatId);
+    await loadAdminChats();
+
+    toast('Message sent!');
+
+  } catch (error) {
+    console.error('Admin reply error:', error);
+    toast('Hindi naipadala: ' + error.message);
+
+  } finally {
+    button.disabled = false;
+  }
+});
+// DAPAT DITO MULI MAGSIMULA ANG LOAD ORDERS
 async function loadOrders(){
   const el = $('#ordersList');
   el.innerHTML = '<p>Kinukuha ang orders...</p>';
@@ -597,8 +751,7 @@ async function loadOrders(){
       return;
     }
 
-  
-
+    // DITO MAGPAPATULOY ANG BUONG ORIGINAL LOAD ORDERS CODE MO
     // GET ALL ORDERS
     const { data: orders, error } = await db
       .from('orders')
@@ -917,7 +1070,15 @@ async function loadOrders(){
 >
   🖨️ PRINT RECEIPT
 </button>
-
+<!-- MESSAGE CUSTOMER -->
+<button
+  type="button"
+  class="primary-btn"
+  data-message-order="${safe(o.order_code || '')}"
+  style="width:100%;margin-bottom:12px;padding:13px;"
+>
+  💬 MESSAGE CUSTOMER
+</button>
             <!-- STATUS UPDATE -->
             <h4>📦 UPDATE ORDER STATUS</h4>
 
