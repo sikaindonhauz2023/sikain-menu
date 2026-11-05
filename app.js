@@ -753,11 +753,15 @@ $('#adminNewChatForm')?.addEventListener('submit', async event => {
     if (error) throw error;
 
     const chat = data;
+const chatLink = new URL(window.location.href);
 
-    const chatLink = new URL(window.location.href);
-    chatLink.searchParams.set('chat_id', chat.id);
-    chatLink.searchParams.set('chat_token', chat.customer_token);
+chatLink.searchParams.set('chat_id', chat.id);
+chatLink.searchParams.set('chat_token', chat.customer_token);
+chatLink.searchParams.set('customer_name', chat.customer_name);
 
+if (chat.order_code) {
+  chatLink.searchParams.set('order_code', chat.order_code);
+}
     $('#adminNewChatLinkInput').value = chatLink.toString();
     $('#adminNewChatLink').hidden = false;
 
@@ -3023,11 +3027,21 @@ async function customerChatStart() {
     return;
   }
 
+  const params = new URLSearchParams(window.location.search);
+
+  const linkToken = params.get('chat_token');
+  const linkName = params.get('customer_name');
+  const linkOrder = params.get('order_code');
+
   const name = $('#customerChatName')?.value.trim()
-    || localStorage.getItem(chatNameKey) || '';
+    || linkName
+    || localStorage.getItem(chatNameKey)
+    || '';
 
   const orderCode = $('#customerChatOrderCode')?.value.trim()
-    || localStorage.getItem(chatOrderKey) || '';
+    || linkOrder
+    || localStorage.getItem(chatOrderKey)
+    || '';
 
   if (!name) {
     alert('Pakilagay ang iyong pangalan.');
@@ -3038,7 +3052,9 @@ async function customerChatStart() {
 
   try {
     customerChatToken =
-      localStorage.getItem(chatTokenKey) || crypto.randomUUID();
+      linkToken ||
+      localStorage.getItem(chatTokenKey) ||
+      crypto.randomUUID();
 
     const { data, error } = await db.rpc('sikain_chat_start', {
       p_customer_name: name,
@@ -3047,6 +3063,12 @@ async function customerChatStart() {
     });
 
     if (error) throw error;
+
+    const requestedChatId = params.get('chat_id');
+
+    if (requestedChatId && data.id !== requestedChatId) {
+      throw new Error('Hindi tugma ang private chat link.');
+    }
 
     customerChatId = data.id;
 
@@ -3118,37 +3140,34 @@ if (chatForm) {
 
 // Ibalik ang dating conversation kapag bumalik ang customer.
 (async function restoreCustomerChat() {
+  const params = new URLSearchParams(window.location.search);
+
+  const linkToken = params.get('chat_token');
+  const linkName = params.get('customer_name');
+
   const savedToken = localStorage.getItem(chatTokenKey);
   const savedName = localStorage.getItem(chatNameKey);
 
-  if (!savedToken || !savedName || !db) return;
+  if (!db) return;
+
+  if (linkToken && linkName) {
+    $('#customerChatName').value = linkName;
+    $('#customerChatOrderCode').value =
+      params.get('order_code') ||
+      localStorage.getItem(chatOrderKey) ||
+      '';
+
+    await customerChatStart();
+    return;
+  }
+
+  if (!savedToken || !savedName) return;
 
   $('#customerChatName').value = savedName;
   $('#customerChatOrderCode').value =
     localStorage.getItem(chatOrderKey) || '';
 
   await customerChatStart();
-})();
-
-  console.log('SIKAIN: Starting customer page...');
-
-  try {
-    console.log('SIKAIN: Loading settings...');
-    await loadSettings();
-    console.log('SIKAIN: Settings loaded.');
-
-  } catch (error) {
-    console.error('SIKAIN SETTINGS INIT ERROR:', error);
-  }
-
-  try {
-    console.log('SIKAIN: Loading products...');
-    await loadProducts();
-    console.log('SIKAIN: Products loaded.');
-
-   } catch (error) {
-    console.error('SIKAIN PRODUCTS INIT ERROR:', error);
-  }
 })();
 
 })();
