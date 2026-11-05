@@ -726,7 +726,71 @@ header.innerHTML = `
     messages.innerHTML = '<p>Hindi ma-load ang messages.</p>';
   }
 }
+// ADMIN CREATE NEW CHAT
+$('#adminNewChatForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
 
+  const name = $('#adminNewChatName').value.trim();
+  const orderCode = $('#adminNewChatOrder').value.trim();
+
+  if (!name) {
+    toast('Ilagay ang customer name.');
+    return;
+  }
+
+  const button = $('#adminNewChatForm button[type="submit"]');
+  button.disabled = true;
+
+  try {
+    const { data, error } = await db.rpc(
+      'sikain_admin_create_chat',
+      {
+        p_customer_name: name,
+        p_order_code: orderCode || null
+      }
+    );
+
+    if (error) throw error;
+
+    const chat = data;
+
+    const chatLink = new URL(window.location.href);
+    chatLink.searchParams.set('chat_id', chat.id);
+    chatLink.searchParams.set('chat_token', chat.customer_token);
+
+    $('#adminNewChatLinkInput').value = chatLink.toString();
+    $('#adminNewChatLink').hidden = false;
+
+    $('#adminNewChatName').value = '';
+    $('#adminNewChatOrder').value = '';
+
+    await loadAdminChats();
+    await openAdminChat(chat.id);
+
+    toast('New conversation created!');
+
+  } catch (error) {
+    console.error('New chat error:', error);
+    toast('Hindi nakagawa ng chat: ' + error.message);
+
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// COPY PRIVATE CHAT LINK
+$('#adminCopyNewChatLink')?.addEventListener('click', async () => {
+  const link = $('#adminNewChatLinkInput').value;
+
+  if (!link) return;
+
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Chat link copied!');
+  } catch (error) {
+    toast('Hindi makopya ang link. Kopyahin ito manually.');
+  }
+});
 // CLICK CONVERSATION
 $('#chatConversationList')?.addEventListener('click', event => {
   const button = event.target.closest('[data-chat-id]');
