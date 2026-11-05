@@ -829,6 +829,9 @@ $('#adminChatClose')?.addEventListener('click', async () => {
     button.disabled = false;
   }
 });
+  console.log('SIKAIN CLOSE BUTTON EVENT READY');
+console.log('CLOSE BUTTON:', $('#adminChatClose'));
+  
 // DAPAT DITO MULI MAGSIMULA ANG LOAD ORDERS
 async function loadOrders(){
   const el = $('#ordersList');
