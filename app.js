@@ -639,17 +639,44 @@ async function loadAdminChats() {
 let activeAdminChatId = null;
 
 
+
 // OPEN CUSTOMER CONVERSATION
 async function openAdminChat(chatId) {
   activeAdminChatId = chatId;
 
   const header = $('#chatConversationHeader');
   const messages = $('#adminChatMessages');
+  const deleteButton = $('#adminChatDeleteMessages');
+  const closeButton = $('#adminChatClose');
 
   header.innerHTML = '<h3>Customer Conversation</h3>';
   messages.innerHTML = '<p>Loading messages...</p>';
 
+  if (deleteButton) deleteButton.hidden = true;
+
   try {
+    // Kunin ang conversation status
+    const { data: chats, error: chatError } =
+      await db.rpc('sikain_admin_list_chats');
+
+    if (chatError) throw chatError;
+
+    const chat = (Array.isArray(chats) ? chats : [])
+      .find(c => c.id === chatId);
+
+    if (!chat) throw new Error('Conversation not found.');
+
+    const isClosed = chat.status === 'closed';
+
+    if (deleteButton) deleteButton.hidden = !isClosed;
+    if (closeButton) closeButton.hidden = isClosed;
+
+    header.innerHTML = `
+      <h3>${esc(chat.customer_name)}</h3>
+      <small>Status: ${isClosed ? 'Closed' : 'Open'}</small>
+    `;
+
+    // Kunin ang messages
     const { data, error } = await db.rpc(
       'sikain_admin_get_messages',
       { p_chat_id: chatId }
@@ -691,7 +718,6 @@ async function openAdminChat(chatId) {
     messages.innerHTML = '<p>Hindi ma-load ang messages.</p>';
   }
 }
-
 
 // CLICK CONVERSATION
 $('#chatConversationList')?.addEventListener('click', event => {
@@ -832,6 +858,45 @@ $('#adminChatClose')?.addEventListener('click', async () => {
   console.log('SIKAIN CLOSE BUTTON EVENT READY');
 console.log('CLOSE BUTTON:', $('#adminChatClose'));
   
+  
+// DELETE MESSAGES - CLOSED CONVERSATION ONLY
+$('#adminChatDeleteMessages')?.addEventListener('click', async () => {
+  if (!activeAdminChatId) {
+    toast('Pumili muna ng conversation.');
+    return;
+  }
+
+  if (!confirm('Sigurado ka bang buburahin ang lahat ng messages sa conversation na ito? Hindi na ito maibabalik.')) {
+    return;
+  }
+
+  const button = $('#adminChatDeleteMessages');
+  button.disabled = true;
+
+  try {
+    const { error } = await db.rpc(
+      'sikain_admin_delete_chat_messages',
+      { p_chat_id: activeAdminChatId }
+    );
+
+    if (error) throw error;
+
+    $('#adminChatMessages').innerHTML =
+      '<p class="muted">All messages have been deleted.</p>';
+
+    await loadAdminChats();
+
+    toast('Messages successfully deleted.');
+
+  } catch (error) {
+    console.error('Delete messages error:', error);
+    toast('Hindi nabura ang messages: ' + error.message);
+
+  } finally {
+    button.disabled = false;
+  }
+});
+
 // DAPAT DITO MULI MAGSIMULA ANG LOAD ORDERS
 async function loadOrders(){
   const el = $('#ordersList');
