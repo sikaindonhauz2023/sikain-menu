@@ -867,10 +867,9 @@ $('#adminChatDeleteMessages')?.addEventListener('click', async () => {
     return;
   }
 
-  if (!confirm('Sigurado ka bang buburahin ang lahat ng messages sa conversation na ito? Hindi na ito maibabalik.')) {
-    return;
-  }
-
+  if (!confirm('Sigurado ka bang buburahin ang buong conversation kasama ang customer details at lahat ng messages? Hindi na ito maibabalik.')) {
+  return;
+}
   const button = $('#adminChatDeleteMessages');
   button.disabled = true;
 
@@ -881,14 +880,20 @@ $('#adminChatDeleteMessages')?.addEventListener('click', async () => {
     );
 
     if (error) throw error;
+activeAdminChatId = null;
 
-    $('#adminChatMessages').innerHTML =
-      '<p class="muted">All messages have been deleted.</p>';
+$('#adminChatMessages').innerHTML =
+  '<p class="muted">Conversation deleted.</p>';
 
-    await loadAdminChats();
+$('#chatConversationHeader').innerHTML =
+  '<h3>Select a conversation</h3>';
 
-    toast('Messages successfully deleted.');
+$('#adminChatClose').hidden = true;
+$('#adminChatDeleteMessages').hidden = true;
 
+await loadAdminChats();
+
+toast('Entire conversation successfully deleted.');
   } catch (error) {
     console.error('Delete messages error:', error);
     toast('Hindi nabura ang messages: ' + error.message);
